@@ -1,24 +1,24 @@
 # Deep Sequential Models for Finance
 
-Este projeto explora modelos sequenciais aplicados a séries temporais financeiras:
+This project explores sequential models applied to financial time series:
 
-- [] Otimização de portfólio com Markowitz
-- [] RNN
-- [] LSTM
-- [] BiLSTM
-- [] GANs para cenários sintéticos
+- [ ] Portfolio optimization with Markowitz
+- [ ] RNN
+- [ ] LSTM
+- [ ] BiLSTM
+- [ ] GANs for synthetic scenarios
 
-Organizado para fins de estudo, pesquisa e portfólio.
+Organized for educational, research, and portfolio-building purposes.
 
-## Estrutura
+## Project Structure
 
-- `notebooks/`: experimentos e visualizações
-- `src/`: código modular para reuso
-- `data/`: dados crus e processados
-- `outputs/`: modelos treinados e gráficos
-- `reports/`: anotações teóricas
+- `notebooks/`: experiments and visualizations
+- `src/`: modular and reusable code
+- `data/`: raw and processed datasets
+- `outputs/`: trained models and charts
+- `reports/`: theoretical notes
 
-## Requisitos
+## Requirements
 
 ```bash
 pip install -r requirements.txt
