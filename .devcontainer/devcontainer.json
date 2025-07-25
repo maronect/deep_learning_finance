@@ -1,0 +1,19 @@
+{
+  "name": "Deep Learning Finance",
+  "context": "..",
+  "dockerFile": "../Dockerfile",
+  "forwardPorts": [8050],
+  "postCreateCommand": "pip install -r requirements.txt",
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-toolsai.jupyter"
+      ]
+    }
+  }
+}

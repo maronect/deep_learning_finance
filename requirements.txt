@@ -1,0 +1,13 @@
+numpy
+scipy
+pandas
+matplotlib
+seaborn
+tikzplotlib
+scikit-learn
+torch
+yfinance
+dash
+plotly
+ipykernel
+pytest
