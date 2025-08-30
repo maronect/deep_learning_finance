@@ -22,3 +22,12 @@ Organized for educational, research, and portfolio-building purposes.
 
 ```bash
 pip install -r requirements.txt
+
+
+
+## LeoComments
+
+- Classe abstrata p modelos
+- Sperara Markowitz em uma classe. Alocador rMark. Alocador Marone
+- POO
+- Começar com Marko, encontrar ponto de falhha. Após isos ir para RedesN
