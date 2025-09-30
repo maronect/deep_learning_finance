@@ -27,21 +27,34 @@ def plot_efficient_frontier(returns: pd.Series, cov_matrix, optimized_weights=No
         risks.append(risk)
     
     plt.figure(figsize=(10, 6))
-    plt.scatter(risks, means, c=np.array(means)/np.array(risks), marker='o', cmap='viridis')
-    plt.colorbar(label='Sharpe Ratio')
-    plt.xlabel('Risco (Volatilidade)')
-    plt.ylabel('Retorno Esperado')
-    plt.title('Fronteira Eficiente - Simulação de Carteiras')
-    plt.grid(True)
+    scatter = plt.scatter(risks, means, c=np.array(means)/np.array(risks), marker='o', cmap='viridis', alpha=0.5)
+    plt.colorbar(scatter, label='Sharpe Ratio')
 
+    # Benchmarks de renda fixa, convertidos para retorno diário
+    benchmarks = {
+        'CDI 15% a.a.': 0.15 / 252,
+        'SELIC 15% a.a.': 0.15 / 252,
+        'Poupança 8% a.a.': 0.08 / 252,
+        'Tesouro Prefixado 14% a.a.': 0.14 / 252
+    }
+
+    for label, daily_return in benchmarks.items():
+        plt.scatter(0.00001, daily_return, label=label, marker='X', s=100)  # risco quase nulo
+
+    # Portfólio ótimo
     if optimized_weights is not None:
         opt_return = np.dot(optimized_weights, returns)
         opt_risk = np.sqrt(np.dot(optimized_weights.T, np.dot(cov_matrix, optimized_weights)))
-        plt.scatter(opt_risk, opt_return, marker='*', color='r', s=200, label='Portfólio Ótimo')
-        plt.legend()
+        plt.scatter(opt_risk, opt_return, marker='*', color='red', s=200, label='Portfólio Ótimo')
 
+    plt.xlabel('Risco (Volatilidade)')
+    plt.ylabel('Retorno Esperado')
+    plt.title('Fronteira Eficiente - Simulação de Carteiras vs. Renda Fixa')
+    plt.grid(True)
+    plt.legend()
     plt.tight_layout()
     plt.show()
+
 
 
 def plot_time_serie(returns: pd.DataFrame, optimized_weights):
@@ -63,8 +76,10 @@ def plot_time_serie(returns: pd.DataFrame, optimized_weights):
 
     plt.figure(figsize=(12, 6))
     for coluna in returns_acumulados.columns:
-        estilo = '-' if coluna != 'Portfólio' else '--'
-        plt.plot(returns_acumulados.index, returns_acumulados[coluna], label=coluna, linestyle=estilo)
+        #estilo = '-' if coluna != 'Portfólio' else '--'
+        linewidth= 2 if coluna == 'Portfólio' else 1
+        color = 'black' if coluna == 'Portfólio' else None
+        plt.plot(returns_acumulados.index, returns_acumulados[coluna], label=coluna, linestyle='-', linewidth=linewidth, color=color)
 
     plt.title("Crescimento Acumulado: Ativos Individuais vs. Portfólio Otimizado")
     plt.xlabel("Data")
