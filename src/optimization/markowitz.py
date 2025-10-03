@@ -14,7 +14,7 @@ def portfolio_volatility(weights, cov_matrix):
     return np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
 
 
-# portfolio_volatility -  portfolio_return
+# TODO (1-lamb)*portfolio_volatility -  lamb * portfolio_return, para vários lambs de 0 a 1
 
 def minimize_volatility(mean_returns, cov_matrix, target_return):
     '''
