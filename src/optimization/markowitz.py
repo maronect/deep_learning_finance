@@ -14,7 +14,7 @@ def portfolio_volatility(weights, cov_matrix):
     return np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
 
 
-# portfolio_volatility -  portfolio_return
+# TODO (1-lamb)*portfolio_volatility -  lamb * portfolio_return, para vários lambs de 0 a 1
 
 def minimize_volatility(mean_returns, cov_matrix, target_return):
     '''
@@ -36,3 +36,27 @@ def minimize_volatility(mean_returns, cov_matrix, target_return):
         print("Erro na otimização Sharpe:", result.message)
         return None
 
+def efficient_frontier_lambda(mean_returns, cov_matrix, lamb_values):
+    portfolios = []
+
+    for lamb in lamb_values:
+        def objective(weights):
+            ret = np.dot(weights, mean_returns)
+            vol = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
+            return (1 - lamb) * vol - lamb * ret
+
+        num_assets = len(mean_returns)
+        bounds = tuple((0, 1) for _ in range(num_assets))
+        initial_guess = num_assets * [1. / num_assets]
+        constraints = [{'type': 'eq', 'fun': lambda x: np.sum(x) - 1}]
+
+        result = minimize(objective, initial_guess, bounds=bounds, constraints=constraints)
+        if result.success:
+            weights = result.x
+            ret = np.dot(weights, mean_returns)
+            vol = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
+            portfolios.append((ret, vol, weights))
+        else:
+            print(f"Erro para lambda={lamb}: {result.message}")
+
+    return portfolios
