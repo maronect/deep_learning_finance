@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from src.optimization.markowitz import efficient_frontier_lambda
+
 def plot_efficient_frontier(returns: pd.Series, cov_matrix, optimized_weights=None, num_points=1000):
     """
     Plota a fronteira eficiente e, opcionalmente, o portfólio otimizado.
@@ -87,4 +89,17 @@ def plot_time_serie(returns: pd.DataFrame, optimized_weights):
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
+    plt.show()
+
+def plot_lambda_markowitz(mean_returns, cov_matrix):
+    lambs = np.linspace(0, 1, 100)
+    portfolios = efficient_frontier_lambda(mean_returns, cov_matrix, lambs)
+
+    rets = [p[0] for p in portfolios]
+    vols = [p[1] for p in portfolios]
+    plt.plot(vols, rets)
+    plt.title("Fronteira Eficiente por Combinação Lambda-Risco/Retorno")
+    plt.xlabel("Volatilidade")
+    plt.ylabel("Retorno Esperado")
+    plt.grid(True)
     plt.show()
