@@ -103,3 +103,13 @@ def plot_lambda_markowitz(mean_returns, cov_matrix):
     plt.ylabel("Retorno Esperado")
     plt.grid(True)
     plt.show()
+
+def compute_benchmark_growth(benchmark_annual_rate, freq, num_periods):
+    freq_map = {
+        'daily': 252,
+        'weekly': 52,
+        'monthly': 12,
+        'annual': 1
+    }
+    periodic_rate = (1 + benchmark_annual_rate) ** (1 / freq_map[freq]) - 1
+    return (1 + periodic_rate) ** np.arange(num_periods)
