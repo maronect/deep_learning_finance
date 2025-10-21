@@ -4,7 +4,7 @@ import pandas as pd
 
 from src.optimization.markowitz import portfolio_return, portfolio_volatility, solve_markowitz
 
-def plot_efficient_frontier(returns: pd.Series, cov_matrix, optimized_weights=None, num_points=1000):
+def plot_efficient_frontier(returns: pd.Series, cov_matrix, optimized_weights=None, num_points=10000, add_tradeoff_curve=True):
     """
     Plota a fronteira eficiente e, opcionalmente, o portfólio otimizado.
 
@@ -32,6 +32,22 @@ def plot_efficient_frontier(returns: pd.Series, cov_matrix, optimized_weights=No
     scatter = plt.scatter(risks, means, c=np.array(means)/np.array(risks), marker='o', cmap='viridis', alpha=0.5)
     plt.colorbar(scatter, label='Sharpe Ratio')
 
+    if add_tradeoff_curve:
+        lamb_array = np.arange(0.0, 1.05, 0.05)
+        ret_list = []
+        vol_list = []
+
+        for lamb in lamb_array:
+            weights_lambda = solve_markowitz(returns, cov_matrix, lamb=lamb)
+            if weights_lambda is not None:
+                ret = portfolio_return(weights_lambda, returns)
+                vol = portfolio_volatility(weights_lambda, cov_matrix)
+                ret_list.append(ret)
+                vol_list.append(vol)
+
+        plt.plot(vol_list, ret_list, color='orange', linestyle='--', linewidth=2, label='Fronteira Teórica (λ)')
+
+    '''
     # Benchmarks de renda fixa, convertidos para retorno diário
     benchmarks = {
         'CDI 15% a.a.': 0.15 / 252,
@@ -42,7 +58,7 @@ def plot_efficient_frontier(returns: pd.Series, cov_matrix, optimized_weights=No
 
     for label, daily_return in benchmarks.items():
         plt.scatter(0.00001, daily_return, label=label, marker='X', s=100)  # risco quase nulo
-
+    '''
     # Portfólio ótimo
     if optimized_weights is not None:
         opt_return = np.dot(optimized_weights, returns)
