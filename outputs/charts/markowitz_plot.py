@@ -123,6 +123,7 @@ def markowitz_tradeoff(mean_returns, cov_matrix, interval=0.1):
     plt.ylabel("Retorno Esperado")
     plt.grid()
     plt.show()
+    return ret_list, vol_list
 
 def compute_benchmark_growth(benchmark_annual_rate, freq, num_periods):
     freq_map = {
