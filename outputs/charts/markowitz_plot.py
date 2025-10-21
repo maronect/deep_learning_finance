@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from src.optimization.markowitz import efficient_frontier_lambda
+from src.optimization.markowitz import portfolio_return, portfolio_volatility, solve_markowitz
 
 def plot_efficient_frontier(returns: pd.Series, cov_matrix, optimized_weights=None, num_points=1000):
     """
@@ -57,8 +57,6 @@ def plot_efficient_frontier(returns: pd.Series, cov_matrix, optimized_weights=No
     plt.tight_layout()
     plt.show()
 
-
-
 def plot_time_serie(returns: pd.DataFrame, optimized_weights):
     """
     Plota o crescimento acumulado dos ativos e do portfólio otimizado.
@@ -91,17 +89,23 @@ def plot_time_serie(returns: pd.DataFrame, optimized_weights):
     plt.tight_layout()
     plt.show()
 
-def plot_lambda_markowitz(mean_returns, cov_matrix):
-    lambs = np.linspace(0, 1, 100)
-    portfolios = efficient_frontier_lambda(mean_returns, cov_matrix, lambs)
+def markowitz_tradeoff(mean_returns, cov_matrix, interval=0.1):
+    lamb_array = np.arange(0.0,1.1,interval)
+    ret_list = []
+    vol_list = []
+    for lamb in lamb_array:
+        weights_markowitz = solve_markowitz(mean_returns, cov_matrix,lamb=lamb)
+        ret = portfolio_return(weights_markowitz, mean_returns)
+        vol = portfolio_volatility(weights_markowitz, cov_matrix)
+        ret_list.append(ret)
+        vol_list.append(vol)
 
-    rets = [p[0] for p in portfolios]
-    vols = [p[1] for p in portfolios]
-    plt.plot(vols, rets)
-    plt.title("Fronteira Eficiente por Combinação Lambda-Risco/Retorno")
-    plt.xlabel("Volatilidade")
+    # grafico retorno risco
+    plt.plot(vol_list, ret_list, marker='o')
+    plt.title("Fronteira Eficiente - Risco vs Retorno")
+    plt.xlabel("Risco (Volatilidade)")
     plt.ylabel("Retorno Esperado")
-    plt.grid(True)
+    plt.grid()
     plt.show()
 
 def compute_benchmark_growth(benchmark_annual_rate, freq, num_periods):
