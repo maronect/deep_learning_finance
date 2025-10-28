@@ -1,5 +1,6 @@
 import yfinance as yf
 import pandas as pd
+import numpy as np
 
 def load_prices(tickers, start, end):
     '''
@@ -22,8 +23,8 @@ def compute_returns(prices, freq='daily'):
     freq_map = {
         'daily': 'D',
         'weekly': 'W',
-        'monthly': 'M',
-        'annual': 'Y'
+        'monthly': 'ME',
+        'annually': 'YE'
     }
 
     if freq not in freq_map:
@@ -43,3 +44,12 @@ def ajustar_risk_free(rf_ano, freq='daily'):
         'annual': 1
     }
     return (1 + rf_ano) ** (1 / freq_map[freq]) - 1
+
+def converter_periodo(ret, vol, dias):
+    """
+    Converte retorno e volatilidade diária para outro período.
+    dias: número médio de dias úteis (21 = mensal, 252 = anual)
+    """
+    ret_conv = (1 + ret) ** dias - 1
+    vol_conv = vol * np.sqrt(dias)
+    return ret_conv, vol_conv
