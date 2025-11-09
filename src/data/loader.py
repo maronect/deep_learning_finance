@@ -53,3 +53,5 @@ def converter_periodo(ret, vol, dias):
     ret_conv = (1 + ret) ** dias - 1
     vol_conv = vol * np.sqrt(dias)
     return ret_conv, vol_conv
+
+

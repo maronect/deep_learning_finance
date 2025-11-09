@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from src.optimization.markowitz import solve_markowitz, portfolio_return, portfolio_volatility
+#from src.data.loader import compute_returns
 
 from src.optimization.markowitz import portfolio_return, portfolio_volatility, solve_markowitz
 
@@ -30,7 +32,7 @@ def plot_efficient_frontier(returns: pd.Series, cov_matrix, optimized_weights=No
     
     plt.figure(figsize=(10, 6))
     scatter = plt.scatter(risks, means, c=np.array(means)/np.array(risks), marker='o', cmap='viridis', alpha=0.5)
-    plt.colorbar(scatter, label='Sharpe Ratio')
+    plt.colorbar(scatter, label='Retorno/Risco (simulado')
 
     if add_tradeoff_curve:
         lamb_array = np.arange(0.0, 1.05, 0.05)
@@ -115,14 +117,6 @@ def markowitz_tradeoff(mean_returns, cov_matrix, interval=0.1):
         vol = portfolio_volatility(weights_markowitz, cov_matrix)
         ret_list.append(ret)
         vol_list.append(vol)
-
-    # grafico retorno risco
-    plt.plot(vol_list, ret_list, marker='o')
-    plt.title("Fronteira Eficiente - Risco vs Retorno")
-    plt.xlabel("Risco (Volatilidade)")
-    plt.ylabel("Retorno Esperado")
-    plt.grid()
-    plt.show()
     return ret_list, vol_list
 
 def compute_benchmark_growth(benchmark_annual_rate, freq, num_periods):
@@ -134,3 +128,58 @@ def compute_benchmark_growth(benchmark_annual_rate, freq, num_periods):
     }
     periodic_rate = (1 + benchmark_annual_rate) ** (1 / freq_map[freq]) - 1
     return (1 + periodic_rate) ** np.arange(num_periods)
+
+def plot_frontier_line(vol_list, ret_list):
+    plt.plot(vol_list, ret_list, marker='o')
+    plt.title("Fronteira Eficiente - Risco vs Retorno")
+    plt.xlabel("Risco (Volatilidade)")
+    plt.ylabel("Retorno Esperado")
+    plt.grid()
+    plt.show()
+
+def plot_comparison_time_series(returns_daily, returns_monthly,mean_returns_daily, cov_matrix_daily,mean_returns_monthly, cov_matrix_monthly,label_daily="Portfólio Diário", label_monthly="Portfólio Mensal"):
+    """
+    Compara as séries temporais acumuladas dos portfólios ótimo diário e mensal.
+
+    Parâmetros:
+        returns_daily (pd.DataFrame): retornos diários dos ativos.
+        returns_monthly (pd.DataFrame): retornos mensais dos ativos.
+        mean_returns_daily, cov_matrix_daily: estatísticas da escala diária.
+        mean_returns_monthly, cov_matrix_monthly: estatísticas da escala mensal.
+    """
+    # Calcula pesos ótimos em cada escala (λ=1 = avesso ao risco)
+    weights_daily = solve_markowitz(mean_returns_daily, cov_matrix_daily, lamb=1)
+    weights_monthly = solve_markowitz(mean_returns_monthly, cov_matrix_monthly, lamb=1)
+
+    # Série temporal do portfólio diário e mensal
+    portfolio_returns_daily = returns_daily.dot(weights_daily)
+    portfolio_returns_monthly = returns_monthly.dot(weights_monthly)
+
+    # Converte o portfólio mensal para o mesmo índice de tempo diário (para plot comparável)
+    portfolio_cum_daily = (1 + portfolio_returns_daily).cumprod()
+    portfolio_cum_monthly = (1 + portfolio_returns_monthly).cumprod()
+
+    # Plot comparativo
+    plt.figure(figsize=(12, 6))
+    plt.plot(portfolio_cum_daily.index, portfolio_cum_daily, label=label_daily, color='blue', linewidth=2)
+    plt.plot(portfolio_cum_monthly.index, portfolio_cum_monthly, label=label_monthly, color='orange', linewidth=2, linestyle='--')
+    plt.title("Comparação de Desempenho: Portfólios Diário vs Mensal")
+    plt.xlabel("Data")
+    plt.ylabel("Crescimento Acumulado")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+def find_lambda_for_target(mean_returns, cov_matrix, target_return, interval=0.01):
+    best_lambda = None
+    best_diff = float('inf')
+    ret_list, vol_list = markowitz_tradeoff(mean_returns, cov_matrix, interval=interval)
+    lambdas = np.arange(0, 1 + interval, interval)
+    
+    for l, r in zip(lambdas, ret_list):
+        diff = abs(r - target_return)
+        if diff < best_diff:
+            best_diff = diff
+            best_lambda = l
+    return best_lambda

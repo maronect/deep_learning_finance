@@ -17,7 +17,9 @@ def markowitz_objective(weights, mean_returns, cov_matrix, lamb):
     '''
     Trade off entre retorno e risco, com um parâmetro lambda
     '''
-    return lamb* np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights))) - (1-lamb)*np.dot(weights, mean_returns)
+    risk = portfolio_volatility(weights, cov_matrix)
+    ret = portfolio_return(weights, mean_returns)
+    return lamb * risk - (1 - lamb) * ret
 
 def minimize_volatility(mean_returns, cov_matrix):
     '''
@@ -36,7 +38,7 @@ def minimize_volatility(mean_returns, cov_matrix):
     if result.success:
         return result.x
     else:
-        print("Erro na otimização Sharpe:", result.message)
+        print("Erro na otimização:", result.message)
         return None
 
 
