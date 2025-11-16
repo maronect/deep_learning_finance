@@ -69,7 +69,7 @@ def plot_efficient_frontier(returns: pd.Series, cov_matrix, optimized_weights=No
 
     plt.xlabel('Risco (Volatilidade)')
     plt.ylabel('Retorno Esperado')
-    plt.title('Fronteira Eficiente - Simulação de Carteiras vs. Renda Fixa')
+    plt.title('Fronteira Eficiente - Simulação de Carteiras')
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
@@ -183,3 +183,168 @@ def find_lambda_for_target(mean_returns, cov_matrix, target_return, interval=0.0
             best_diff = diff
             best_lambda = l
     return best_lambda
+
+
+def compare_pure_mk_with_lr(
+    pure_returns: pd.Series,
+    predicted_returns: pd.Series,
+    cov_matrix: pd.DataFrame,
+    num_points=5000,
+    add_tradeoff_curve=True
+):
+    """
+    Compara a fronteira eficiente do Markowitz puro com a fronteira usando
+    retornos previstos pela Regressão Linear (predicted_returns).
+
+    Parâmetros:
+        pure_returns (pd.Series): médias históricas tradicionais dos ativos.
+        predicted_returns (pd.Series): retornos previstos pelo modelo (E[R]).
+        cov_matrix (pd.DataFrame): matriz de covariância dos ativos.
+    """
+
+    num_assets = len(pure_returns)
+
+    # ------------------------------
+    # 1. Fronteira do Markowitz Puro
+    # ------------------------------
+    pure_means = []
+    pure_risks = []
+
+    for _ in range(num_points):
+        w = np.random.random(num_assets)
+        w /= np.sum(w)
+        pure_means.append(np.dot(w, pure_returns))
+        pure_risks.append(np.sqrt(np.dot(w.T, np.dot(cov_matrix, w))))
+
+    # ------------------------------
+    # 2. Fronteira usando Regressão
+    # ------------------------------
+    pred_means = []
+    pred_risks = []
+
+    for _ in range(num_points):
+        w = np.random.random(num_assets)
+        w /= np.sum(w)
+        pred_means.append(np.dot(w, predicted_returns))
+        pred_risks.append(np.sqrt(np.dot(w.T, np.dot(cov_matrix, w))))
+
+    # ------------------------------
+    # 3. Plot das simulações
+    # ------------------------------
+    plt.figure(figsize=(12, 7))
+
+    plt.scatter(
+        pure_risks, pure_means,
+        alpha=0.4, label="Markowitz Puro (Histórico)",
+        color="blue"
+    )
+
+    plt.scatter(
+        pred_risks, pred_means,
+        alpha=0.4, label="Markowitz com Regressão (LR)",
+        color="orange"
+    )
+
+    # ------------------------------
+    # 4. Curva teórica (λ trade-off)
+    # ------------------------------
+    if add_tradeoff_curve:
+        lamb_array = np.arange(0, 1.05, 0.05)
+
+        # --- Puro ---
+        ret_pure = []
+        vol_pure = []
+
+        for lamb in lamb_array:
+            w = solve_markowitz(pure_returns, cov_matrix, lamb=lamb)
+            ret_pure.append(portfolio_return(w, pure_returns))
+            vol_pure.append(portfolio_volatility(w, cov_matrix))
+
+        plt.plot(
+            vol_pure, ret_pure,
+            linestyle="--", color="darkblue",
+            linewidth=2, label="Fronteira Teórica - Puro"
+        )
+
+        # --- LR ---
+        ret_pred = []
+        vol_pred = []
+
+        for lamb in lamb_array:
+            w = solve_markowitz(predicted_returns, cov_matrix, lamb=lamb)
+            ret_pred.append(portfolio_return(w, predicted_returns))
+            vol_pred.append(portfolio_volatility(w, cov_matrix))
+
+        plt.plot(
+            vol_pred, ret_pred,
+            linestyle="--", color="darkorange",
+            linewidth=2, label="Fronteira Teórica - LR"
+        )
+
+    # ------------------------------
+    # Finalização do gráfico
+    # ------------------------------
+    plt.xlabel("Risco (Volatilidade)")
+    plt.ylabel("Retorno Esperado")
+    plt.title("Comparação das Fronteiras: Markowitz Puro vs. Regressão Linear")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_compare_time_series(
+    returns: pd.DataFrame,
+    pure_returns: pd.Series,
+    predicted_returns: pd.Series,
+    cov_matrix: pd.DataFrame,
+    lamb=1.0
+):
+    """
+    Compara o crescimento acumulado dos portfólios ótimos:
+    - Markowitz Puro (mean historical)
+    - Markowitz com Regressão Linear (predicted mean returns)
+
+    Parâmetros:
+        returns (pd.DataFrame): retornos diários reais dos ativos
+        pure_returns (pd.Series): média histórica dos retornos
+        predicted_returns (pd.Series): retornos previstos pelo modelo LR
+        cov_matrix (pd.DataFrame): matriz de covariância dos ativos
+        lamb (float): parâmetro de aversão a risco (0 = max retorno, 1 = min risco)
+    """
+
+    # ---------- Pesos do Markowitz Puro ----------
+    weights_pure = solve_markowitz(pure_returns, cov_matrix, lamb=lamb)
+    portfolio_pure = (1 + returns.dot(weights_pure)).cumprod()
+
+    # ---------- Pesos do Markowitz + LR ----------
+    weights_pred = solve_markowitz(predicted_returns, cov_matrix, lamb=lamb)
+    portfolio_pred = (1 + returns.dot(weights_pred)).cumprod()
+
+    # ---------- Gráfico ----------
+    plt.figure(figsize=(12, 6))
+
+    plt.plot(
+        portfolio_pure.index,
+        portfolio_pure,
+        label="Markowitz Puro",
+        linewidth=2,
+        color="blue"
+    )
+
+    plt.plot(
+        portfolio_pred.index,
+        portfolio_pred,
+        label="Markowitz + Regressão Linear",
+        linewidth=2,
+        linestyle="--",
+        color="orange"
+    )
+
+    plt.title("Comparação de Crescimento do Portfólio: Puro vs Regressão Linear")
+    plt.xlabel("Data")
+    plt.ylabel("Crescimento Acumulado")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()

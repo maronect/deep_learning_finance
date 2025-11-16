@@ -7,7 +7,7 @@ from src.data.loader import compute_returns
 from sklearn.metrics import mean_squared_error, r2_score
 
 
-def create_features(returns: pd.DataFrame, window: int = 5) -> pd.DataFrame:
+def create_features(returns: pd.DataFrame, window: int = 5) -> pd.DataFrame: #OK
     """
     Cria features simples baseadas nos retornos passados.
     - média móvel
@@ -18,14 +18,14 @@ def create_features(returns: pd.DataFrame, window: int = 5) -> pd.DataFrame:
     """
     features = pd.DataFrame(index=returns.index)
 
-    for col in returns.columns:
-        features[f"{col}_lag1"] = returns[col].shift(1) # retorno do dia anterior
-        features[f"{col}_mean_{window}"] = returns[col].rolling(window).mean() # média móvel (5 dias)
+    for col in returns.columns: # Col = ativo, linha = data point (dia)
+        features[f"{col}_lag1"] = returns[col].shift(1) # retorno do dia anterior (valor de t-1 aparece em t)
+        features[f"{col}_mean_{window}"] = returns[col].rolling(window).mean() # média móvel (5 dias), incluindo o dia atual
         features[f"{col}_std_{window}"] = returns[col].rolling(window).std() # desvio padrão móvel (5 dias)
 
     # Se os retornos passados forem positivos e estáveis, a média e o lag serão positivos 
     #   \_ o modelo tende a prever retorno positivo (momentum).
-    return features.dropna()
+    return features.dropna() # remove linhas com NaN gerados pelos shifts e rolling
 
 def predict_mean_returns(prices: pd.DataFrame, window: int = 5) -> pd.Series:
     """
@@ -38,28 +38,30 @@ def predict_mean_returns(prices: pd.DataFrame, window: int = 5) -> pd.Series:
     features = create_features(returns, window=window)
 
     X = features
-    y_dict = {}
-    predicted_means = {}
+    y_dict = {} # usado para armazenar os modelos treinados (uso futuro)
+    predicted_means = {} # dicionario p armazenar os retornos previstos para cada ativo
 
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    scaler = StandardScaler() # padroniza as features (média 0, desvio 1)
+    X_scaled = scaler.fit_transform(X) # Array com as mesmas dimensões que X, mas padronizado
 
     # Para cada ativo, treinamos um modelo simples
     for col in returns.columns:
         # alvo: retorno atual
-        y = returns[col].loc[X.index]
-        model = LinearRegression()
-        model.fit(X_scaled, y.values)
+        y = returns[col].loc[X.index] # vetor de saida y para o ativo atual / retorno do ativo em cada data (alinha com X)
+        model = LinearRegression() # O X MARCA O TESOURO XXXXXXXXXXXXXXXXXXXXX (matar regressao antes!)
+
+        model.fit(X_scaled, y.values) #treina com todas as linhas de X_scaled e tem y como alvo
+        # \_“Dada a combinação dos retornos passados (lags / médias / desvios) de todos os ativos, qual é o retorno desse ativo hoje?”
         
         # previsão do último ponto conhecido (t+1)
-        X_last = X_scaled[-1].reshape(1, -1) # ultima janeala
-        y_pred = model.predict(X_last)[0] # pevisao do próximo retorno
+        X_last = X_scaled[-1].reshape(1, -1)    # ultima janeala (último dia em que todas as features estão disponíveis), transforma em array 2D de uma linha
+        y_pred = model.predict(X_last)[0] # pevisao do próximo retorno (o retorno de amanhã, t+1)
 
-        predicted_means[col] = y_pred
-        y_dict[col] = model
+        predicted_means[col] = y_pred # armazena o retorno previsto no dicionário
+        y_dict[col] = model # armazena o modelo treinado (uso futuro)
 
-    return pd.Series(predicted_means, name="Predicted_Mean_Returns")
-    # aprende a relacao linear do comportamento rescento dos retornos e o retorno seguinte 
+    return pd.Series(predicted_means, name="Predicted_Mean_Returns")# retorna a série com os retornos previstos para cada ativo
+    # aprende a relacao linear do comportamento rescento dos retornos e o retorno seguinte(t+1)
     # e prevê o próximo retorno
 
 
@@ -78,7 +80,7 @@ def evaluate_linear_model(prices: pd.DataFrame, window: int = 5, test_size: floa
 
     results = []
 
-    split_idx = int(len(X_scaled) * (1 - test_size))
+    split_idx = int(len(X_scaled) * (1 - test_size)) # índice para divisão treino/teste (separando temporalmente ate uma data)
 
     for col in returns.columns:
         y = returns[col].loc[X.index].values
