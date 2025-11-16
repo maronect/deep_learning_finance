@@ -204,9 +204,7 @@ def compare_pure_mk_with_lr(
 
     num_assets = len(pure_returns)
 
-    # ------------------------------
-    # 1. Fronteira do Markowitz Puro
-    # ------------------------------
+
     pure_means = []
     pure_risks = []
 
@@ -216,9 +214,7 @@ def compare_pure_mk_with_lr(
         pure_means.append(np.dot(w, pure_returns))
         pure_risks.append(np.sqrt(np.dot(w.T, np.dot(cov_matrix, w))))
 
-    # ------------------------------
-    # 2. Fronteira usando Regressão
-    # ------------------------------
+
     pred_means = []
     pred_risks = []
 
@@ -228,9 +224,7 @@ def compare_pure_mk_with_lr(
         pred_means.append(np.dot(w, predicted_returns))
         pred_risks.append(np.sqrt(np.dot(w.T, np.dot(cov_matrix, w))))
 
-    # ------------------------------
-    # 3. Plot das simulações
-    # ------------------------------
+
     plt.figure(figsize=(12, 7))
 
     plt.scatter(
@@ -245,9 +239,7 @@ def compare_pure_mk_with_lr(
         color="orange"
     )
 
-    # ------------------------------
-    # 4. Curva teórica (λ trade-off)
-    # ------------------------------
+
     if add_tradeoff_curve:
         lamb_array = np.arange(0, 1.05, 0.05)
 
@@ -281,9 +273,7 @@ def compare_pure_mk_with_lr(
             linewidth=2, label="Fronteira Teórica - LR"
         )
 
-    # ------------------------------
-    # Finalização do gráfico
-    # ------------------------------
+
     plt.xlabel("Risco (Volatilidade)")
     plt.ylabel("Retorno Esperado")
     plt.title("Comparação das Fronteiras: Markowitz Puro vs. Regressão Linear")
@@ -313,15 +303,12 @@ def plot_compare_time_series(
         lamb (float): parâmetro de aversão a risco (0 = max retorno, 1 = min risco)
     """
 
-    # ---------- Pesos do Markowitz Puro ----------
     weights_pure = solve_markowitz(pure_returns, cov_matrix, lamb=lamb)
     portfolio_pure = (1 + returns.dot(weights_pure)).cumprod()
 
-    # ---------- Pesos do Markowitz + LR ----------
     weights_pred = solve_markowitz(predicted_returns, cov_matrix, lamb=lamb)
     portfolio_pred = (1 + returns.dot(weights_pred)).cumprod()
 
-    # ---------- Gráfico ----------
     plt.figure(figsize=(12, 6))
 
     plt.plot(
