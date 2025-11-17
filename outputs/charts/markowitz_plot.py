@@ -316,6 +316,16 @@ def compare_pure_mk_with_lr(
     plt.tight_layout()
     plt.show()
 
+    print("Médias históricas diárias:")
+    print(pure_daily_returns.describe())
+
+    print("\nMédias previstas diárias (RL):")
+    print(predicted_daily_returns.describe())
+
+    pred_daily = predicted_daily_returns
+    print("Top 5 maiores previsões diárias:")
+    print(pred_daily.sort_values(ascending=False).head())
+
 
 def plot_compare_time_series(
     returns_daily: pd.DataFrame,
