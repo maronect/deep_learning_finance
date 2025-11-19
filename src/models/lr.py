@@ -1,7 +1,7 @@
 # src/predictors/expected_returns.py
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.preprocessing import StandardScaler
 from src.data.loader import compute_returns
 from sklearn.metrics import mean_squared_error, r2_score
@@ -27,12 +27,17 @@ def create_features(returns: pd.DataFrame, window: int = 5) -> pd.DataFrame: #OK
     #   \_ o modelo tende a prever retorno positivo (momentum).
     return features.dropna() # remove linhas com NaN gerados pelos shifts e rolling
 
-def predict_mean_returns(prices: pd.DataFrame, window: int = 5) -> pd.Series:
+def predict_mean_returns(
+    prices: pd.DataFrame,
+    window: int = 5,
+    alpha_blend: float = 0.35,
+    clip_value: float = 0.005 # clip_value = historical_std[col] * 2
+) -> pd.Series:
     """
-    Usa Regressão Linear para prever o retorno esperado (médio)
-    de cada ativo com base em janelas passadas de retornos.
-
-    Retorna um pd.Series com a média prevista (E[R_i]) para cada ativo.
+    Versão melhorada com:
+    - Regularização Ridge
+    - Clipping de previsões irreais
+    - Shrink (blend histórico + previsão)
     """
     returns = compute_returns(prices, freq='daily')
     features = create_features(returns, window=window)
@@ -44,11 +49,13 @@ def predict_mean_returns(prices: pd.DataFrame, window: int = 5) -> pd.Series:
     scaler = StandardScaler() # padroniza as features (média 0, desvio 1)
     X_scaled = scaler.fit_transform(X) # Array com as mesmas dimensões que X, mas padronizado
 
+    historical_mean = returns.mean()
+
     # Para cada ativo, treinamos um modelo simples
     for col in returns.columns:
         # alvo: retorno atual
         y = returns[col].loc[X.index] # vetor de saida y para o ativo atual / retorno do ativo em cada data (alinha com X)
-        model = LinearRegression() # O X MARCA O TESOURO XXXXXXXXXXXXXXXXXXXXX (matar regressao antes!)
+        model = Ridge(alpha=1.0)   # O X MARCA O TESOURO XXXXXXXXXXXXXXXXXXXXX (matar regressao antes!)
 
         model.fit(X_scaled, y.values) #treina com todas as linhas de X_scaled e tem y como alvo
         # \_“Dada a combinação dos retornos passados (lags / médias / desvios) de todos os ativos, qual é o retorno desse ativo hoje?”
@@ -57,7 +64,13 @@ def predict_mean_returns(prices: pd.DataFrame, window: int = 5) -> pd.Series:
         X_last = X_scaled[-1].reshape(1, -1)    # ultima janeala (último dia em que todas as features estão disponíveis), transforma em array 2D de uma linha
         y_pred = model.predict(X_last)[0] # pevisao do próximo retorno (o retorno de amanhã, t+1)
 
-        predicted_means[col] = y_pred # armazena o retorno previsto no dicionário
+          ### ALTERAÇÃO 3: clipping para conter explosões
+        y_pred = np.clip(y_pred, -clip_value, clip_value)
+
+        ### ALTERAÇÃO 2: aplicar shrinkage (blend entre RL e histórico)
+        y_pred_final = alpha_blend * y_pred + (1 - alpha_blend) * historical_mean[col]
+
+        predicted_means[col] = y_pred_final # armazena o retorno previsto no dicionário
         y_dict[col] = model # armazena o modelo treinado (uso futuro)
 
     return pd.Series(predicted_means, name="Predicted_Mean_Returns")# retorna a série com os retornos previstos para cada ativo
@@ -87,7 +100,7 @@ def evaluate_linear_model(prices: pd.DataFrame, window: int = 5, test_size: floa
         X_train, X_test = X_scaled[:split_idx], X_scaled[split_idx:]
         y_train, y_test = y[:split_idx], y[split_idx:]
 
-        model = LinearRegression().fit(X_train, y_train)
+        model = Ridge(alpha=1.0).fit(X_train, y_train)
         y_pred = model.predict(X_test)
 
         mse = mean_squared_error(y_test, y_pred)
@@ -118,7 +131,7 @@ def inspect_coefficients(prices: pd.DataFrame, window: int = 5):
 
     for col in returns.columns:
         y = returns[col].loc[X.index].values
-        model = LinearRegression().fit(X_scaled, y)
+        model = Ridge(alpha=1.0).fit(X_scaled, y)
         coefs[col] = model.coef_
 
     return coefs

@@ -8,16 +8,14 @@ from sklearn.linear_model import LinearRegression, RidgeCV
 import math
 
 
-def plot_parity_return_prediction(prices: pd.DataFrame, window: int = 5):
-    """
-    Gráfico de paridade (Real vs Previsto) para a Regressão Linear.
-    Mostra visualmente o alinhamento entre os valores reais e previstos.
-    
-    Eixo X = previsto pelo modelo
-    Eixo Y = retorno real
-    """
+from sklearn.linear_model import Ridge
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+import numpy as np
 
-    # ------------- Preparar dados -------------
+
+def plot_parity_return_prediction(prices: pd.DataFrame, window: int = 5):
+
     returns = compute_returns(prices, freq='daily')
     features = create_features(returns, window=window)
 
@@ -25,43 +23,36 @@ def plot_parity_return_prediction(prices: pd.DataFrame, window: int = 5):
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    plt.figure(figsize=(10, 8))
-
-    # Para armazenar todos os pontos
     y_real_all = []
     y_pred_all = []
 
-    # ------------- Treinar e prever -------------
+    plt.figure(figsize=(10, 8))
+
     for col in returns.columns:
-        y = returns[col].loc[X.index]
+        y_real = returns[col].loc[X.index].values
 
-        # Usar o mesmo modelo qualificado
-        model = RidgeCV(alphas=np.logspace(-4, 2, 20))
-        model.fit(X_scaled, y.values)
+        model = Ridge(alpha=1.0)
+        model.fit(X_scaled, y_real)
 
-        # previsões para TODA a série temporal
         y_pred = model.predict(X_scaled)
 
-        y_real_all.extend(y.values)
+        y_real_all.extend(y_real)
         y_pred_all.extend(y_pred)
 
-        # scatter para cada ativo
-        plt.scatter(y_pred, y.values, alpha=0.25, label=col)
+        plt.scatter(y_pred, y_real, alpha=0.25, label=col)
 
-    # ------------- Linha de paridade -------------
     lim_min = min(min(y_pred_all), min(y_real_all))
     lim_max = max(max(y_pred_all), max(y_real_all))
 
-    plt.plot([lim_min, lim_max], [lim_min, lim_max], 'k--', linewidth=2, label="Linha 45°")
+    plt.plot([lim_min, lim_max], [lim_min, lim_max], 'k--', linewidth=2)
 
-    # ------------- Cálculo da correlação global -------------
     corr = np.corrcoef(y_real_all, y_pred_all)[0, 1]
 
     plt.xlabel("Retorno Previsto")
     plt.ylabel("Retorno Real")
-    plt.title(f"Gráfico de Paridade (Real vs Previsto) — Correlação Global = {corr:.3f}")
-    plt.legend()
+    plt.title(f"Gráfico Real vs Previsto — Correlação Global = {corr:.3f}")
     plt.grid(True)
+    plt.legend()
     plt.tight_layout()
     plt.show()
 
@@ -70,13 +61,10 @@ def plot_parity_return_prediction(prices: pd.DataFrame, window: int = 5):
 
 
 def plot_parity_by_all_assets(prices, window=5):
-    """
-    Cria um painel de subplots (3x3, 2x3 etc dependendo do número de ativos)
-    mostrando os gráficos de paridade (Real vs Previsto) para cada ativo individualmente.
-    """
 
     returns = compute_returns(prices, freq='daily')
     features = create_features(returns, window=window)
+
     X = features
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
@@ -93,7 +81,7 @@ def plot_parity_by_all_assets(prices, window=5):
 
         y_real = returns[ticker].loc[X.index].values
 
-        model = LinearRegression()
+        model = Ridge(alpha=1.0)
         model.fit(X_scaled, y_real)
 
         y_pred = model.predict(X_scaled)
@@ -102,8 +90,10 @@ def plot_parity_by_all_assets(prices, window=5):
 
         plt.subplot(rows, cols, i + 1)
         plt.scatter(y_pred, y_real, alpha=0.4, s=12)
+
         lim_min = min(min(y_pred), min(y_real))
         lim_max = max(max(y_pred), max(y_real))
+
         plt.plot([lim_min, lim_max], [lim_min, lim_max], 'r--', linewidth=1)
 
         plt.title(f"{ticker} (corr={corr:.2f})")
@@ -113,4 +103,3 @@ def plot_parity_by_all_assets(prices, window=5):
 
     plt.tight_layout()
     plt.show()
-
