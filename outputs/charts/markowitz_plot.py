@@ -2,9 +2,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from src.optimization.markowitz import solve_markowitz, portfolio_return, portfolio_volatility
-#from src.data.loader import compute_returns
-
-from src.optimization.markowitz import portfolio_return, portfolio_volatility, solve_markowitz
 
 def plot_efficient_frontier(returns: pd.Series, cov_matrix, optimized_weights=None, num_points=10000, add_tradeoff_curve=True):
     """
@@ -49,18 +46,6 @@ def plot_efficient_frontier(returns: pd.Series, cov_matrix, optimized_weights=No
 
         plt.plot(vol_list, ret_list, color='orange', linestyle='--', linewidth=2, label='Fronteira Teórica (λ)')
 
-    '''
-    # Benchmarks de renda fixa, convertidos para retorno diário
-    benchmarks = {
-        'CDI 15% a.a.': 0.15 / 252,
-        'SELIC 15% a.a.': 0.15 / 252,
-        'Poupança 8% a.a.': 0.08 / 252,
-        'Tesouro Prefixado 14% a.a.': 0.14 / 252
-    }
-
-    for label, daily_return in benchmarks.items():
-        plt.scatter(0.00001, daily_return, label=label, marker='X', s=100)  # risco quase nulo
-    '''
     # Portfólio ótimo
     if optimized_weights is not None:
         opt_return = np.dot(optimized_weights, returns)
@@ -185,212 +170,131 @@ def find_lambda_for_target(mean_returns, cov_matrix, target_return, interval=0.0
     return best_lambda
 
 
-def compare_pure_mk_with_lr(
-    pure_daily_returns: pd.Series,
-    predicted_daily_returns: pd.Series,
-    cov_daily: pd.DataFrame,
-    pure_monthly_returns: pd.Series,
-    cov_monthly: pd.DataFrame,
+def compare_frontiers(
+    models: list,
     num_points=4000,
-    add_tradeoff_curve=True
+    lambdas=np.arange(0, 1.05, 0.05),
 ):
     """
-    Compara 3 fronteiras eficientes na escala mensal:
-    1. Markowitz Puro (média diária convertida em mensal)
-    2. Markowitz com Regressão Linear (daily predicted convertido em mensal)
-    3. Markowitz Puro Mensal REAL (usando retornos mensais)
-    Inclui também as linhas das fronteiras (λ tradeoff curves).
+    Plota fronteiras eficientes para N modelos na ESCALA MENSAL.
+
+    Cada item de 'models':
+    {
+        "name": str,
+        "mean_returns": pd.Series,
+        "cov": pd.DataFrame,
+        "is_monthly": bool,     # True = não converter
+        "color": str,
+        "linestyle": str
+    }
     """
 
-    # 1. Converter diário -> mensal
-    dias_mes = 21
+    plt.figure(figsize=(14, 9))
 
-    pure_monthly_conv = (1 + pure_daily_returns) ** dias_mes - 1
-    pred_monthly_conv = (1 + predicted_daily_returns) ** dias_mes - 1
+    for model in models:
 
-    cov_month_conv = cov_daily * dias_mes
+        name = model["name"]
+        mean = model["mean_returns"].copy()
+        cov = model["cov"].copy()
+        is_monthly = model.get("is_monthly", False)
 
-    num_assets = len(pure_daily_returns)
+        # ------------ CONVERSÃO (diário → mensal) ------------
+        if not is_monthly:
+            dias = 21
+            mean = (1 + mean) ** dias - 1
+            cov = cov * dias
 
-    # 2. Simular carteiras para cada fronteira
+        num_assets = len(mean)
 
-    # A) Markowitz Puro (diário convertido -> mensal)
-    means_pure, risks_pure = [], []
-    for _ in range(num_points):
-        w = np.random.random(num_assets)
-        w /= np.sum(w)
+        # ------------ SIMULAÇÃO DE CARTEIRAS ------------
+        means_sim, risks_sim = [], []
+        for _ in range(num_points):
+            w = np.random.random(num_assets)
+            w /= np.sum(w)
 
-        ret = np.dot(w, pure_monthly_conv)
-        vol = np.sqrt(np.dot(w.T, np.dot(cov_month_conv, w)))
+            ret = np.dot(w, mean)
+            vol = np.sqrt(w.T @ cov @ w)
 
-        means_pure.append(ret)
-        risks_pure.append(vol)
+            means_sim.append(ret)
+            risks_sim.append(vol)
 
-    # B) Markowitz com Regressão (convertido -> mensal)
-    means_pred, risks_pred = [], []
-    for _ in range(num_points):
-        w = np.random.random(num_assets)
-        w /= np.sum(w)
-
-        ret = np.dot(w, pred_monthly_conv)
-        vol = np.sqrt(np.dot(w.T, np.dot(cov_month_conv, w)))
-
-        means_pred.append(ret)
-        risks_pred.append(vol)
-
-    # C) Markowitz Mensal REAL
-    means_real, risks_real = [], []
-    for _ in range(num_points):
-        w = np.random.random(num_assets)
-        w /= np.sum(w)
-
-        ret = np.dot(w, pure_monthly_returns)
-        vol = np.sqrt(np.dot(w.T, np.dot(cov_monthly, w)))
-
-        means_real.append(ret)
-        risks_real.append(vol)
-
-    # 3. Plotar fronteiras simuladas (scatter)
-
-    plt.figure(figsize=(13, 8))
-
-    plt.scatter(risks_pure, means_pure, alpha=0.35, color="blue",
-                label="Puro (diário -> mensal)")
-    plt.scatter(risks_pred, means_pred, alpha=0.35, color="orange",
-                label="Regressão (diário -> mensal)")
-    plt.scatter(risks_real, means_real, alpha=0.35, color="green",
-                label="Puro Mensal REAL")
-
-    # 4. Adicionar linhas da fronteira (λ curves)
-    if add_tradeoff_curve:
-
-        lamb_arr = np.arange(0, 1.05, 0.05)
-
-        # Linha A: Puro (diário convertido)
-        ret_curve_pure = []
-        vol_curve_pure = []
-        for lamb in lamb_arr:
-            w = solve_markowitz(pure_monthly_conv, cov_month_conv, lamb=lamb)
-            ret_curve_pure.append(portfolio_return(w, pure_monthly_conv))
-            vol_curve_pure.append(portfolio_volatility(w, cov_month_conv))
-
-        plt.plot(
-            vol_curve_pure, ret_curve_pure,
-            color="navy", linewidth=2.3, linestyle="--",
-            label="Fronteira Puro (D->M)"
+        plt.scatter(
+            risks_sim, means_sim,
+            label=f"{name} (simulado)",
+            alpha=0.25,
+            color=model["color"]
         )
 
-        # Linha B: Regressão (convertido)
-        ret_curve_pred = []
-        vol_curve_pred = []
-        for lamb in lamb_arr:
-            w = solve_markowitz(pred_monthly_conv, cov_month_conv, lamb=lamb)
-            ret_curve_pred.append(portfolio_return(w, pred_monthly_conv))
-            vol_curve_pred.append(portfolio_volatility(w, cov_month_conv))
+        # ------------ FRONTEIRA λ ------------
+        ret_curve, vol_curve = [], []
+        for lamb in lambdas:
+            w = solve_markowitz(mean, cov, lamb=lamb)
+            ret_curve.append(portfolio_return(w, mean))
+            vol_curve.append(portfolio_volatility(w, cov))
 
         plt.plot(
-            vol_curve_pred, ret_curve_pred,
-            color="darkorange", linewidth=2.3, linestyle="--",
-            label="Fronteira LR (D->M)"
+            vol_curve, ret_curve,
+            label=f"Fronteira {name}",
+            color=model["color"],
+            linestyle=model["linestyle"],
+            linewidth=2.5
         )
 
-        # Linha C: Mensal REAL
-        ret_curve_real = []
-        vol_curve_real = []
-        for lamb in lamb_arr:
-            w = solve_markowitz(pure_monthly_returns, cov_monthly, lamb=lamb)
-            ret_curve_real.append(portfolio_return(w, pure_monthly_returns))
-            vol_curve_real.append(portfolio_volatility(w, cov_monthly))
-
-        plt.plot(
-            vol_curve_real, ret_curve_real,
-            color="darkgreen", linewidth=2.3, linestyle="--",
-            label="Fronteira Real (Mensal)"
-        )
-
+    plt.title("Comparação de Fronteiras Eficientes — Escala Mensal")
     plt.xlabel("Risco (Volatilidade Mensal)")
     plt.ylabel("Retorno Esperado Mensal")
-    plt.title("Comparação de Fronteiras Eficientes na Escala Mensal")
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
     plt.show()
 
-    print("Médias históricas diárias:")
-    print(pure_daily_returns.describe())
 
-    print("\nMédias previstas diárias (RL):")
-    print(predicted_daily_returns.describe())
-
-    pred_daily = predicted_daily_returns
-    print("Top 5 maiores previsões diárias:")
-    print(pred_daily.sort_values(ascending=False).head())
-
-
-def plot_compare_time_series(
+def compare_time_series(
     returns_daily: pd.DataFrame,
-    returns_monthly: pd.DataFrame,
-    pure_daily_returns: pd.Series,
-    predicted_daily_returns: pd.Series,
-    pure_monthly_returns: pd.Series,
-    cov_daily: pd.DataFrame,
-    cov_monthly: pd.DataFrame,
+    models: list,
     lamb=0.5
 ):
     """
-    Compara o crescimento acumulado MENSAL dos 3 portfólios:
+    Compara o crescimento acumulado mensal de N modelos.
 
-    1. Markowitz Puro (pesos diários convertidos para mensal)
-    2. Markowitz com Regressão Linear (pesos diários convertidos para mensal)
-    3. Markowitz Puro Mensal REAL (pesos mensais)
+    Cada item de 'models':
+    {
+        "name": str,
+        "mean_returns": pd.Series,
+        "cov": pd.DataFrame,
+        "color": str,
+        "linestyle": str
+    }
     """
 
-    # =============== Pesos na escala diária ===============
+    plt.figure(figsize=(14, 8))
 
-    weights_pure_daily = solve_markowitz(pure_daily_returns, cov_daily, lamb=lamb)
-    weights_pred_daily = solve_markowitz(predicted_daily_returns, cov_daily, lamb=lamb)
+    for model in models:
 
-    # =============== Pesos na escala mensal (reais) ===============
+        name = model["name"]
+        mean = model["mean_returns"]
+        cov = model["cov"]
 
-    weights_month_real = solve_markowitz(pure_monthly_returns, cov_monthly, lamb=lamb)
+        weights = solve_markowitz(mean, cov, lamb=lamb)
 
-    # =============== Retorno diário dos portfólios ===============
+        port_daily = returns_daily.dot(weights)
 
-    portfolio_pure_daily = returns_daily.dot(weights_pure_daily)
-    portfolio_pred_daily = returns_daily.dot(weights_pred_daily)
+        port_monthly = port_daily.resample("ME").agg(lambda x: (1 + x).prod() - 1)
 
-    # Converter para retornos mensais somando por agregação:
+        acum = (1 + port_monthly).cumprod()
 
-    portfolio_pure_monthly = portfolio_pure_daily.resample("ME").agg(lambda x: (1 + x).prod() - 1)
-    portfolio_pred_monthly = portfolio_pred_daily.resample("ME").agg(lambda x: (1 + x).prod() - 1)
+        plt.plot(
+            acum.index, acum,
+            label=name,
+            linewidth=2,
+            color=model["color"],
+            linestyle=model["linestyle"]
+        )
 
-    # Portfólio REAL baseado em retornos mensais:
-
-    portfolio_month_real = returns_monthly.dot(weights_month_real)
-
-    # =============== Crescimento acumulado ===============
-
-    pure_acum = (1 + portfolio_pure_monthly).cumprod()
-    pred_acum = (1 + portfolio_pred_monthly).cumprod()
-    real_acum = (1 + portfolio_month_real).cumprod()
-
-    # =============== Plot ===============
-
-    plt.figure(figsize=(12, 7))
-
-    plt.plot(pure_acum.index, pure_acum, label="Markowitz Puro (diário->mensal)",
-             linewidth=2, color="blue")
-
-    plt.plot(pred_acum.index, pred_acum, label="Regressão (diário->mensal)",
-             linewidth=2, linestyle="--", color="orange")
-
-    plt.plot(real_acum.index, real_acum, label="Markowitz Mensal REAL",
-             linewidth=2, color="green")
-
-    plt.xlabel("Data (Escala Mensal)")
-    plt.ylabel("Crescimento Acumulado")
     plt.title("Comparação Temporal dos Portfólios (Escala Mensal)")
-    plt.grid()
+    plt.xlabel("Tempo (Mensal)")
+    plt.ylabel("Crescimento Acumulado")
+    plt.grid(True)
     plt.legend()
     plt.tight_layout()
     plt.show()

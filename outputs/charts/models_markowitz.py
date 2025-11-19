@@ -4,17 +4,11 @@ import pandas as pd
 from src.models.lr import create_features
 from src.data.loader import compute_returns
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression, RidgeCV
 import math
+from sklearn.linear_model import Ridge #, LinearRegression, RidgeCV
 
 
-from sklearn.linear_model import Ridge
-from sklearn.preprocessing import StandardScaler
-import matplotlib.pyplot as plt
-import numpy as np
-
-
-def plot_parity_return_prediction(prices: pd.DataFrame, window: int = 5):
+def plot_LR_parity_return_prediction(prices: pd.DataFrame, window: int = 5):
 
     returns = compute_returns(prices, freq='daily')
     features = create_features(returns, window=window)
@@ -56,11 +50,7 @@ def plot_parity_return_prediction(prices: pd.DataFrame, window: int = 5):
     plt.tight_layout()
     plt.show()
 
-
-
-
-
-def plot_parity_by_all_assets(prices, window=5):
+def plot_LR_parity_by_all_assets(prices, window=5):
 
     returns = compute_returns(prices, freq='daily')
     features = create_features(returns, window=window)
