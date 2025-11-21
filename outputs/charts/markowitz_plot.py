@@ -169,7 +169,7 @@ def find_lambda_for_target(mean_returns, cov_matrix, target_return, interval=0.0
             best_lambda = l
     return best_lambda
 
-
+'''
 def compare_frontiers(
     models: list,
     num_points=4000,
@@ -248,7 +248,7 @@ def compare_frontiers(
     plt.tight_layout()
     plt.show()
 
-
+'''
 def compare_time_series(
     returns_daily: pd.DataFrame,
     models: list,
