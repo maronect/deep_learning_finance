@@ -29,7 +29,7 @@ def create_features(returns: pd.DataFrame, window: int = 5) -> pd.DataFrame: #OK
 
 def predict_mean_returns(
     prices: pd.DataFrame,
-    window: int = 5,
+    window: int = 10,
     alpha_blend: float = 0.35,
     clip_value: float = 0.005 # clip_value = historical_std[col] * 2
 ) -> pd.Series:
@@ -55,22 +55,23 @@ def predict_mean_returns(
     for col in returns.columns:
         # alvo: retorno atual
         y = returns[col].loc[X.index] # vetor de saida y para o ativo atual / retorno do ativo em cada data (alinha com X)
-        model = Ridge(alpha=1.0)   # O X MARCA O TESOURO XXXXXXXXXXXXXXXXXXXXX (matar regressao antes!)
+        # model = Ridge(alpha=1.0)   # O X MARCA O TESOURO XXXXXXXXXXXXXXXXXXXXX (matar regressao antes!)
+        model = LinearRegression()   # O X MARCA O TESOURO XXXXXXXXXXXXXXXXXXXXX (matar regressao antes!)
 
         model.fit(X_scaled, y.values) #treina com todas as linhas de X_scaled e tem y como alvo
         # \_“Dada a combinação dos retornos passados (lags / médias / desvios) de todos os ativos, qual é o retorno desse ativo hoje?”
         
         # previsão do último ponto conhecido (t+1)
-        X_last = X_scaled[-1].reshape(1, -1)    # ultima janeala (último dia em que todas as features estão disponíveis), transforma em array 2D de uma linha
+        X_last = X_scaled[-2].reshape(1, -1)    # penultima (not ultima janeala) (último dia em que todas as features estão disponíveis), transforma em array 2D de uma linha
         y_pred = model.predict(X_last)[0] # pevisao do próximo retorno (o retorno de amanhã, t+1)
 
           ### ALTERAÇÃO 3: clipping para conter explosões
-        y_pred = np.clip(y_pred, -clip_value, clip_value)
+        # y_pred = np.clip(y_pred, -clip_value, clip_value)
 
         ### ALTERAÇÃO 2: aplicar shrinkage (blend entre RL e histórico)
-        y_pred_final = alpha_blend * y_pred + (1 - alpha_blend) * historical_mean[col]
+        # y_pred_final = alpha_blend * y_pred + (1 - alpha_blend) * historical_mean[col]
 
-        predicted_means[col] = y_pred_final # armazena o retorno previsto no dicionário
+        predicted_means[col] = y_pred # armazena o retorno previsto no dicionário
         y_dict[col] = model # armazena o modelo treinado (uso futuro)
 
     return pd.Series(predicted_means, name="Predicted_Mean_Returns")# retorna a série com os retornos previstos para cada ativo

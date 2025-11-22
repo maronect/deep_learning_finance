@@ -185,8 +185,7 @@ def find_lambda_for_risk(mean_returns, cov_matrix, target_risk, interval=0.01):
 
 def compare_frontiers(
     models: list,
-    num_points=4000,
-    lambdas=np.arange(0, 1.05, 0.05),
+    window: int,
 ):
     """
     Plota fronteiras eficientes para N modelos na ESCALA MENSAL.
@@ -201,6 +200,8 @@ def compare_frontiers(
         "linestyle": str
     }
     """
+    lambdas=np.arange(0, 1.05, 0.01)
+
 
     plt.figure(figsize=(14, 9))
 
@@ -209,34 +210,8 @@ def compare_frontiers(
         name = model["name"]
         mean = model["mean_returns"].copy()
         cov = model["cov"].copy()
-        is_monthly = model.get("is_monthly", False)
 
-        # ------------ CONVERSÃO (diário → mensal) ------------
-        if not is_monthly:
-            dias = 21
-            mean = (1 + mean) ** dias - 1
-            cov = cov * dias
 
-        num_assets = len(mean)
-
-        # ------------ SIMULAÇÃO DE CARTEIRAS ------------
-        means_sim, risks_sim = [], []
-        for _ in range(num_points):
-            w = np.random.random(num_assets)
-            w /= np.sum(w)
-
-            ret = np.dot(w, mean)
-            vol = np.sqrt(w.T @ cov @ w)
-
-            means_sim.append(ret)
-            risks_sim.append(vol)
-
-        plt.scatter(
-            risks_sim, means_sim,
-            label=f"{name} (simulado)",
-            alpha=0.25,
-            color=model["color"]
-        )
 
         # ------------ FRONTEIRA λ ------------
         ret_curve, vol_curve = [], []
@@ -250,16 +225,19 @@ def compare_frontiers(
             label=f"Fronteira {name}",
             color=model["color"],
             linestyle=model["linestyle"],
-            linewidth=2.5
+            linewidth=2.5,
+            marker='o', markersize=5
         )
 
-    plt.title("Comparação de Fronteiras Eficientes — Escala Mensal")
-    plt.xlabel("Risco (Volatilidade Mensal)")
-    plt.ylabel("Retorno Esperado Mensal")
+    plt.title("Comparação de Fronteiras Eficientes — Janela {}".format(window))
+    plt.xlabel("Risco (Volatilidade Janela)")
+    plt.ylabel("Retorno Esperado Janela")
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
     plt.show()
+
+    return ret_curve, vol_curve, lambdas
 
 
 def compare_time_series(
