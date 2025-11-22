@@ -169,7 +169,20 @@ def find_lambda_for_target(mean_returns, cov_matrix, target_return, interval=0.0
             best_lambda = l
     return best_lambda
 
-'''
+def find_lambda_for_risk(mean_returns, cov_matrix, target_risk, interval=0.01):
+    best_lambda = None
+    best_diff = float('inf')
+    ret_list, vol_list = markowitz_tradeoff(mean_returns, cov_matrix, interval=interval)
+    lambdas = np.arange(0, 1 + interval, interval)
+    
+    for l, v in zip(lambdas, vol_list):
+        diff = abs(v - target_risk)
+        if diff < best_diff:
+            best_diff = diff
+            best_lambda = l
+    return best_lambda
+
+
 def compare_frontiers(
     models: list,
     num_points=4000,
@@ -248,11 +261,11 @@ def compare_frontiers(
     plt.tight_layout()
     plt.show()
 
-'''
+
 def compare_time_series(
     returns_daily: pd.DataFrame,
     models: list,
-    lamb=0.5
+    target_risk=0.1
 ):
     """
     Compara o crescimento acumulado mensal de N modelos.
@@ -274,12 +287,22 @@ def compare_time_series(
         name = model["name"]
         mean = model["mean_returns"]
         cov = model["cov"]
+        is_monthly = model["is_monthly"]
+
+         # ------------ CONVERSÃO (diário → mensal) ------------
+        if not is_monthly:
+            dias = 21
+            mean = (1 + mean) ** dias - 1
+            cov = cov * dias
+
+        lamb = find_lambda_for_risk(mean, cov, target_risk)
 
         weights = solve_markowitz(mean, cov, lamb=lamb)
 
-        port_daily = returns_daily.dot(weights)
+        print(lamb, name, portfolio_volatility(weights, cov), portfolio_return(weights, mean))
 
-        port_monthly = port_daily.resample("ME").agg(lambda x: (1 + x).prod() - 1)
+        port_monthly = returns_daily.resample("ME").agg(lambda x: (1 + x).prod() - 1)
+        port_monthly = port_monthly.dot(weights)
 
         acum = (1 + port_monthly).cumprod()
 
