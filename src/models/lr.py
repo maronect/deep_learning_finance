@@ -1,13 +1,15 @@
 # src/predictors/expected_returns.py
 import pandas as pd
 import numpy as np
-from sklearn.linear_model import LinearRegression, Ridge
+
+from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
+
 from src.data.loader import compute_returns
 from sklearn.metrics import mean_squared_error, r2_score
 
 
-def create_features(returns: pd.DataFrame, window: int = 5) -> pd.DataFrame: #OK
+def create_features(returns: pd.DataFrame, window: int = 5) -> pd.DataFrame:
     """
     Cria features simples baseadas nos retornos passados.
     - média móvel
@@ -18,111 +20,119 @@ def create_features(returns: pd.DataFrame, window: int = 5) -> pd.DataFrame: #OK
     """
     features = pd.DataFrame(index=returns.index)
 
-    for col in returns.columns: # Col = ativo, linha = data point (dia)
-        features[f"{col}_lag1"] = returns[col].shift(1) # retorno do dia anterior (valor de t-1 aparece em t)
-        features[f"{col}_mean_{window}"] = returns[col].rolling(window).mean() # média móvel (5 dias), incluindo o dia atual
-        features[f"{col}_std_{window}"] = returns[col].rolling(window).std() # desvio padrão móvel (5 dias)
-
-    # Se os retornos passados forem positivos e estáveis, a média e o lag serão positivos 
-    #   \_ o modelo tende a prever retorno positivo (momentum).
-    return features.dropna() # remove linhas com NaN gerados pelos shifts e rolling
-
-def predict_mean_returns(
-    prices: pd.DataFrame,
-    window: int = 5,
-    alpha_blend: float = 0.35,
-    clip_value: float = 0.005 # clip_value = historical_std[col] * 2
-) -> pd.Series:
-    """
-    Versão melhorada com:
-    - Regularização Ridge
-    - Clipping de previsões irreais
-    - Shrink (blend histórico + previsão)
-    """
-    returns = compute_returns(prices, freq='daily')
-    features = create_features(returns, window=window)
-
-    X = features
-    y_dict = {} # usado para armazenar os modelos treinados (uso futuro)
-    predicted_means = {} # dicionario p armazenar os retornos previstos para cada ativo
-
-    scaler = StandardScaler() # padroniza as features (média 0, desvio 1)
-    X_scaled = scaler.fit_transform(X) # Array com as mesmas dimensões que X, mas padronizado
-
-    historical_mean = returns.mean()
-
-    # Para cada ativo, treinamos um modelo simples
     for col in returns.columns:
-        # alvo: retorno atual
-        y = returns[col].loc[X.index] # vetor de saida y para o ativo atual / retorno do ativo em cada data (alinha com X)
-        model = Ridge(alpha=1.0)   # O X MARCA O TESOURO XXXXXXXXXXXXXXXXXXXXX (matar regressao antes!)
+        features[f"{col}_lag1"] = returns[col].shift(1)
+        features[f"{col}_mean_{window}"] = returns[col].rolling(window).mean()
+        features[f"{col}_std_{window}"] = returns[col].rolling(window).std()
 
-        model.fit(X_scaled, y.values) #treina com todas as linhas de X_scaled e tem y como alvo
-        # \_“Dada a combinação dos retornos passados (lags / médias / desvios) de todos os ativos, qual é o retorno desse ativo hoje?”
-        
-        # previsão do último ponto conhecido (t+1)
-        X_last = X_scaled[-1].reshape(1, -1)    # ultima janeala (último dia em que todas as features estão disponíveis), transforma em array 2D de uma linha
-        y_pred = model.predict(X_last)[0] # pevisao do próximo retorno (o retorno de amanhã, t+1)
-
-          ### ALTERAÇÃO 3: clipping para conter explosões
-        y_pred = np.clip(y_pred, -clip_value, clip_value)
-
-        ### ALTERAÇÃO 2: aplicar shrinkage (blend entre RL e histórico)
-        y_pred_final = alpha_blend * y_pred + (1 - alpha_blend) * historical_mean[col]
-
-        predicted_means[col] = y_pred_final # armazena o retorno previsto no dicionário
-        y_dict[col] = model # armazena o modelo treinado (uso futuro)
-
-    return pd.Series(predicted_means, name="Predicted_Mean_Returns")# retorna a série com os retornos previstos para cada ativo
-    # aprende a relacao linear do comportamento rescento dos retornos e o retorno seguinte(t+1)
-    # e prevê o próximo retorno
+    return features.dropna()  # remove NaNs gerados pelos shifts e rolling
 
 
-def evaluate_linear_model(prices: pd.DataFrame, window: int = 5, test_size: float = 0.2):
+# NOVO — PREVISÃO TEMPORAL (ROLLING WALK-FORWARD)
+def predict_daily_series_lr(prices: pd.DataFrame, window: int = 5) -> pd.DataFrame:
     """
-    Avalia o desempenho preditivo da regressão linear
-    para cada ativo, usando uma divisão treino/teste.
+    Gera uma SÉRIE TEMPORAL de previsões diárias usando walk-forward.
 
-    Retorna um DataFrame com MSE, R² e correlação real x previsto.
+    PARA CADA ATIVO:
+        Para cada dia t:
+            - Treina o modelo com dados até t-1
+            - Prevê o retorno de t
+        Gera uma série (mesmo tamanho de returns)
+
+    Isso corrige o erro anterior (que usava APENAS o último dia).
     """
-    returns = compute_returns(prices, freq='daily')
-    features = create_features(returns, window=window)
-    X = features.dropna()
+
+    returns = compute_returns(prices, freq="daily")
+    features = create_features(returns, window)
+    features = features.dropna()
+
+    tickers = returns.columns
+    preds = pd.DataFrame(index=features.index, columns=tickers)
+
+    X_raw = features.values
+
+    # Padronização fixa (mas NÃO treinamos o modelo nos dados futuros)
     scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    X_scaled = scaler.fit_transform(X_raw)
 
+    # -----------------------------
+    # Um loop temporal por ativo
+    # -----------------------------
+    for col in tickers:
+        y = returns[col].loc[features.index].values
+        y_pred_list = []
+
+        min_train = 30
+
+        for t in range(min_train, len(X_scaled)):
+            X_train = X_scaled[:t]
+            y_train = y[:t]
+
+            X_test = X_scaled[t].reshape(1, -1)
+
+            model = Ridge(alpha=1.0)
+            model.fit(X_train, y_train)
+
+            y_pred_t = model.predict(X_test)[0]
+            y_pred_list.append(y_pred_t)
+
+        # CORREÇÃO: substitui chained assignment pelo método correto
+        preds.loc[features.index[min_train:], col] = y_pred_list
+    return preds
+
+
+# Retorno esperado (μ) a partir da PREVISÃO temporal
+def expected_return_from_predictions(pred_series: pd.DataFrame):
+    """
+    Converte a série de previsões diárias (walk-forward)
+    em um retorno esperado estimado:
+
+    μ_diário = média das previsões
+    μ_mensal = (1 + μ_diário)^21 - 1
+    """
+    mu_daily = pred_series.mean()
+    mu_monthly = (1 + mu_daily) ** 21 - 1
+    return mu_daily, mu_monthly
+
+
+# Avaliação temporal REAL da previsão (walk-forward)
+def evaluate_prediction_series(real: pd.DataFrame, pred: pd.DataFrame) -> pd.DataFrame:
+    """
+    Avalia previsão temporal diária (walk-forward) com MSE, R² e correlação.
+    """
     results = []
 
-    split_idx = int(len(X_scaled) * (1 - test_size)) # índice para divisão treino/teste (separando temporalmente ate uma data)
+    for col in real.columns:
+        r = real[col].loc[pred.index].dropna()
+        p = pred[col].loc[pred.index].dropna()
 
-    for col in returns.columns:
-        y = returns[col].loc[X.index].values
-        X_train, X_test = X_scaled[:split_idx], X_scaled[split_idx:]
-        y_train, y_test = y[:split_idx], y[split_idx:]
+        # alinhar tamanho
+        idx = r.index.intersection(p.index)
+        r = r.loc[idx]
+        p = p.loc[idx]
 
-        model = Ridge(alpha=1.0).fit(X_train, y_train)
-        y_pred = model.predict(X_test)
-
-        mse = mean_squared_error(y_test, y_pred)
-        r2 = r2_score(y_test, y_pred)
-        corr = np.corrcoef(y_test, y_pred)[0, 1]
+        mse = ((r - p) ** 2).mean()
+        corr = r.corr(p)
+        r2 = 1 - (r - p).var() / r.var()
 
         results.append({
             "Ticker": col,
-            "MSE": mse, # baixo = boa precisão relativa (escala depende da magnitude dos retornos)
-            "R²": r2, # R² > 0 = o modelo tem algum poder de explicação sobre os retornos
-            "Correlação": corr # correlação positiva (>0.1) = previsões estão alinhadas com a direção dos retornos
+            "MSE": mse,
+            "R²": r2,
+            "Correlação": corr
         })
 
     return pd.DataFrame(results)
 
+
+# (Mantido) — Inspeção de coeficientes (mesma lógica)
 def inspect_coefficients(prices: pd.DataFrame, window: int = 5):
     """
-    Mostra os coeficientes da regressão linear para cada ativo,
-    indicando o peso das features na previsão dos retornos.
+    Mostra os coeficientes da regressão linear para cada ativo
+    usando COMO TREINO o dataset inteiro (sem previsão).
     """
     returns = compute_returns(prices, freq='daily')
-    features = create_features(returns, window=window)
+    features = create_features(returns, window)
     X = features.dropna()
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)

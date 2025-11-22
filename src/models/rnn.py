@@ -1,254 +1,169 @@
-# src/models/rnn.py
-
 import numpy as np
 import pandas as pd
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
-from sklearn.preprocessing import StandardScaler
+
 from sklearn.metrics import mean_squared_error, r2_score
-
 from src.data.loader import compute_returns
-from src.models.lr import create_features  # ajusta se seu caminho for outro
 
 
-# -----------------------
-# Helper: cria sequências (janela deslizante)
-# -----------------------
-def create_sequences(X: np.ndarray, y: np.ndarray, seq_len: int = 20):
-    """
-    Transforma uma série tabular em sequências para RNN/LSTM.
-
-    X: array 2D (tempo x features)
-    y: array 1D (retornos)
-    seq_len: tamanho da janela temporal
-
-    Retorna:
-        X_seq: (num_sequencias, seq_len, num_features)
-        y_seq: (num_sequencias,)
-    """
-    seq_X = []
-    seq_y = []
-    for i in range(seq_len, len(X)):
-        seq_X.append(X[i - seq_len:i])
-        seq_y.append(y[i])
-    return np.array(seq_X), np.array(seq_y)
+# =============================================================
+# (A) Criar janelas univariadas
+# =============================================================
+def create_univariate_sequences(y: np.ndarray, seq_len=20):
+    X, y_out = [], []
+    for i in range(seq_len, len(y)):
+        janela = y[i-seq_len:i]
+        alvo   = y[i]
+        X.append(janela.reshape(seq_len, 1))
+        y_out.append(alvo)
+    return np.array(X), np.array(y_out)
 
 
-# -----------------------
-# Modelo RNN simples com LSTM
-# -----------------------
+# =============================================================
+# (B) Modelo LSTM simples
+# =============================================================
 class RNNRegressor(nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int = 32, num_layers: int = 1):
+    def __init__(self, hidden_dim=32, num_layers=1):
         super().__init__()
         self.lstm = nn.LSTM(
-            input_size=input_dim,
+            input_size=1,
             hidden_size=hidden_dim,
             num_layers=num_layers,
-            batch_first=True,
+            batch_first=True
         )
         self.fc = nn.Linear(hidden_dim, 1)
 
     def forward(self, x):
-        # x: (batch, seq_len, input_dim)
-        out, _ = self.lstm(x)          # out: (batch, seq_len, hidden_dim)
-        last_out = out[:, -1, :]       # pega apenas o último passo de tempo
-        out = self.fc(last_out)        # (batch, 1)
-        return out.squeeze(-1)         # (batch,)
+        out, _ = self.lstm(x)
+        h = out[:, -1, :]        # último passo
+        return self.fc(h).squeeze(-1)
 
 
-# -----------------------
-# Treinar um modelo RNN em PyTorch
-# -----------------------
-def _train_rnn_model(
-    X_seq: np.ndarray,
-    y_seq: np.ndarray,
-    hidden_dim: int = 32,
-    num_layers: int = 1,
-    epochs: int = 40,
-    batch_size: int = 32,
-    lr: float = 1e-3,
-) -> RNNRegressor:
-    """
-    Treina um modelo RNN simples (LSTM) para regressão.
-    """
+# =============================================================
+# (C) Treinar modelo em um único bloco de dados
+# =============================================================
+def _train_model(X_train, y_train, hidden_dim, num_layers, epochs, batch_size):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    X_tensor = torch.from_numpy(X_seq).float().to(device)
-    y_tensor = torch.from_numpy(y_seq).float().to(device)
+    X_t = torch.from_numpy(X_train).float().to(device)
+    y_t = torch.from_numpy(y_train).float().to(device)
 
-    dataset = TensorDataset(X_tensor, y_tensor)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    loader = DataLoader(TensorDataset(X_t, y_t), batch_size=batch_size, shuffle=False)
 
-    input_dim = X_seq.shape[2]
-    model = RNNRegressor(input_dim=input_dim, hidden_dim=hidden_dim, num_layers=num_layers).to(device)
+    model = RNNRegressor(hidden_dim=hidden_dim, num_layers=num_layers).to(device)
 
-    criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+    loss_fn = nn.MSELoss()
 
     model.train()
-    for epoch in range(epochs):
-        epoch_loss = 0.0
-        for xb, yb in dataloader:
-            optimizer.zero_grad()
-            preds = model(xb)
-            loss = criterion(preds, yb)
+    for _ in range(epochs):
+        for xb, yb in loader:
+            opt.zero_grad()
+            pred = model(xb)
+            loss = loss_fn(pred, yb)
             loss.backward()
-            optimizer.step()
-            epoch_loss += loss.item() * xb.size(0)
-        # Se quiser ver o treino:
-        # print(f"Epoch {epoch+1}/{epochs} - Loss: {epoch_loss / len(dataset):.6f}")
+            opt.step()
 
     return model
 
 
-# -----------------------
-# (1) Prever retorno médio por ativo com RNN
-# -----------------------
-def predict_mean_returns_rnn(
-    prices: pd.DataFrame,
-    window: int = 5,
-    seq_len: int = 20,
-    hidden_dim: int = 32,
-    num_layers: int = 1,
-    epochs: int = 40,
-    batch_size: int = 32,
-    alpha_blend: float = 0.35,
-    clip_value: float = 0.005,
-) -> pd.Series:
+# =============================================================
+# (D) PREVISÃO DIÁRIA WALK-FORWARD (sem leakage)
+# =============================================================
+def predict_daily_series_rnn(
+    prices,
+    seq_len=20,
+    hidden_dim=32,
+    num_layers=1,
+    epochs=40,
+    batch_size=32
+):
     """
-    Usa uma RNN (LSTM) para prever o retorno esperado (médio) de cada ativo,
-    baseado em janelas temporais das features.
-
-    Mantém a mesma ideia do modelo linear:
-    - Treina um modelo por ativo
-    - Usa toda a série para treino
-    - Preve o próximo retorno (t+1)
-    - Aplica clipping + shrink (blend com média histórica) para não explodir.
+    Para cada ativo:
+        Para cada dia t:
+            - Treina modelo com dados até t-1
+            - Preve retorno em t
+        -> série temporal de previsão real
     """
-    returns = compute_returns(prices, freq="daily")
-    features = create_features(returns, window=window)
 
-    X_raw = features.values
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X_raw)
-
+    returns = compute_returns(prices)
     tickers = returns.columns
-    historical_mean = returns.mean()
 
-    predicted_means = {}
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    preds_df = pd.DataFrame(index=returns.index, columns=tickers)
 
     for col in tickers:
-        # Série de retornos desse ativo alinhada às features
-        y = returns[col].loc[features.index].values
+        y = returns[col].dropna().values
+        idx = returns[col].dropna().index
 
-        # Cria sequências para RNN
-        X_seq, y_seq = create_sequences(X_scaled, y, seq_len=seq_len)
-
-        # Treina o modelo RNN nesse ativo
-        model = _train_rnn_model(
-            X_seq,
-            y_seq,
-            hidden_dim=hidden_dim,
-            num_layers=num_layers,
-            epochs=epochs,
-            batch_size=batch_size,
-        )
-
-        # Previsão do próximo retorno: usa a última janela conhecida
-        X_last_seq = X_scaled[-seq_len:].reshape(1, seq_len, X_scaled.shape[1])
-        X_last_tensor = torch.from_numpy(X_last_seq).float().to(device)
-
-        model.eval()
-        with torch.no_grad():
-            y_pred = model(X_last_tensor).cpu().numpy()[0]
-
-        # Clipping para não explodir
-        y_pred = np.clip(y_pred, -clip_value, clip_value)
-
-        # Shrink (blend com média histórica)
-        y_pred_final = alpha_blend * y_pred + (1 - alpha_blend) * historical_mean[col]
-
-        predicted_means[col] = y_pred_final
-
-    return pd.Series(predicted_means, name="Predicted_RNN_Mean_Returns")
-
-
-# -----------------------
-# (2) Avaliar qualidade preditiva da RNN (MSE, R², Correlação)
-# -----------------------
-def evaluate_rnn_model(
-    prices: pd.DataFrame,
-    window: int = 5,
-    seq_len: int = 20,
-    hidden_dim: int = 32,
-    num_layers: int = 1,
-    epochs: int = 40,
-    batch_size: int = 32,
-    test_size: float = 0.2,
-) -> pd.DataFrame:
-    """
-    Avalia a RNN para cada ativo usando divisão treino/teste sequencial.
-
-    Retorna um DataFrame com:
-        - MSE
-        - R²
-        - Correlação (real vs previsto)
-    """
-    returns = compute_returns(prices, freq="daily")
-    features = create_features(returns, window=window)
-
-    X_raw = features.values
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X_raw)
-
-    tickers = returns.columns
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    results = []
-
-    for col in tickers:
-        y = returns[col].loc[features.index].values
-
-        X_seq, y_seq = create_sequences(X_scaled, y, seq_len=seq_len)
-
-        if len(X_seq) < 10:
-            # Muito pouco dado para esse ativo nessa configuração
+        if len(y) < seq_len + 30:
             continue
 
-        split_idx = int(len(X_seq) * (1 - test_size))
+        pred_series = [np.nan] * len(y)
 
-        X_train, X_test = X_seq[:split_idx], X_seq[split_idx:]
-        y_train, y_test = y_seq[:split_idx], y_seq[split_idx:]
+        # walk-forward
+        for t in range(seq_len+30, len(y)):
+            y_train = y[:t]
 
-        # Treina modelo na parte de treino
-        model = _train_rnn_model(
-            X_train,
-            y_train,
-            hidden_dim=hidden_dim,
-            num_layers=num_layers,
-            epochs=epochs,
-            batch_size=batch_size,
-        )
+            X_train, y_train_seq = create_univariate_sequences(y_train, seq_len)
 
-        # Previsão na parte de teste
-        model.eval()
-        with torch.no_grad():
-            X_test_tensor = torch.from_numpy(X_test).float().to(device)
-            y_pred_tensor = model(X_test_tensor)
-            y_pred = y_pred_tensor.cpu().numpy()
+            if len(X_train) < 10:
+                continue
 
-        mse = mean_squared_error(y_test, y_pred)
-        r2 = r2_score(y_test, y_pred)
-        corr = np.corrcoef(y_test, y_pred)[0, 1]
+            model = _train_model(
+                X_train, y_train_seq,
+                hidden_dim, num_layers, epochs, batch_size
+            )
+
+            # previsão do retorno em t
+            x_last = y[t-seq_len:t].reshape(1, seq_len, 1)
+            x_last_t = torch.from_numpy(x_last).float()
+
+            model.eval()
+            with torch.no_grad():
+                pred = model(x_last_t).item()
+
+            pred_series[t] = pred
+
+        preds_df[col].loc[idx] = pred_series
+
+    return preds_df
+
+
+# =============================================================
+# (E) Retorno esperado (μ previsto)
+# =============================================================
+def expected_return_from_predictions(pred_series):
+    mu_daily = pred_series.mean()
+    mu_monthly = (1 + mu_daily)**21 - 1
+    return mu_daily, mu_monthly
+
+
+# =============================================================
+# (F) Avaliação temporal
+# =============================================================
+def evaluate_rnn_model(prices, pred_series):
+    returns = compute_returns(prices)
+    results = []
+
+    for col in returns.columns:
+        r = returns[col].loc[pred_series.index].dropna()
+        p = pred_series[col].loc[pred_series.index].dropna()
+
+        idx = r.index.intersection(p.index)
+        r = r.loc[idx]
+        p = p.loc[idx]
+
+        mse = ((r - p)**2).mean()
+        corr = r.corr(p)
+        r2  = 1 - (r - p).var() / r.var()
 
         results.append({
             "Ticker": col,
             "MSE": mse,
             "R²": r2,
-            "Correlação": corr,
+            "Correlação": corr
         })
 
     return pd.DataFrame(results)
