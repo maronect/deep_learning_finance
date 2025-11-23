@@ -1,23 +1,24 @@
+# =============================================================
+# RNN RÁPIDA WALK-FORWARD (TREINO ÚNICO + AUTO-REGRESSÃO)
+# =============================================================
+
 import numpy as np
 import pandas as pd
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from sklearn.metrics import mean_squared_error, r2_score
 from src.data.loader import compute_returns
 
 
 # =============================================================
 # (A) Criar janelas univariadas
 # =============================================================
-def create_univariate_sequences(y: np.ndarray, seq_len=20):
+def create_sequences(y, seq_len):
     X, y_out = [], []
     for i in range(seq_len, len(y)):
-        janela = y[i-seq_len:i]
-        alvo   = y[i]
-        X.append(janela.reshape(seq_len, 1))
-        y_out.append(alvo)
+        X.append(y[i-seq_len:i].reshape(seq_len, 1))
+        y_out.append(y[i])
     return np.array(X), np.array(y_out)
 
 
@@ -37,14 +38,15 @@ class RNNRegressor(nn.Module):
 
     def forward(self, x):
         out, _ = self.lstm(x)
-        h = out[:, -1, :]        # último passo
+        h = out[:, -1, :]
         return self.fc(h).squeeze(-1)
 
 
 # =============================================================
-# (C) Treinar modelo em um único bloco de dados
+# (C) Treinar modelo
 # =============================================================
-def _train_model(X_train, y_train, hidden_dim, num_layers, epochs, batch_size):
+def train_rnn(X_train, y_train, hidden_dim, num_layers, epochs, batch_size):
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     X_t = torch.from_numpy(X_train).float().to(device)
@@ -60,6 +62,9 @@ def _train_model(X_train, y_train, hidden_dim, num_layers, epochs, batch_size):
     model.train()
     for _ in range(epochs):
         for xb, yb in loader:
+            xb = xb.to(device)
+            yb = yb.to(device)
+
             opt.zero_grad()
             pred = model(xb)
             loss = loss_fn(pred, yb)
@@ -70,7 +75,7 @@ def _train_model(X_train, y_train, hidden_dim, num_layers, epochs, batch_size):
 
 
 # =============================================================
-# (D) PREVISÃO DIÁRIA WALK-FORWARD (sem leakage)
+# (D) WALK-FORWARD RÁPIDO (Treina 1 vez + prevê T dias)
 # =============================================================
 def predict_daily_series_rnn(
     prices,
@@ -78,55 +83,64 @@ def predict_daily_series_rnn(
     hidden_dim=32,
     num_layers=1,
     epochs=40,
-    batch_size=32
+    batch_size=32,
+    train_ratio=0.8
 ):
     """
     Para cada ativo:
-        Para cada dia t:
-            - Treina modelo com dados até t-1
-            - Preve retorno em t
-        -> série temporal de previsão real
+        1. divide série em treino e teste (temporal)
+        2. treina UMA RNN com a parte de treino
+        3. previsão walk-forward auto-regressiva no teste
     """
-
     returns = compute_returns(prices)
     tickers = returns.columns
-
     preds_df = pd.DataFrame(index=returns.index, columns=tickers)
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     for col in tickers:
+
         y = returns[col].dropna().values
         idx = returns[col].dropna().index
 
-        if len(y) < seq_len + 30:
+        if len(y) < seq_len + 40:
             continue
 
-        pred_series = [np.nan] * len(y)
+        # divisão temporal
+        split = int(len(y) * train_ratio)
+        y_train = y[:split]
+        y_test  = y[split:]
 
-        # walk-forward
-        for t in range(seq_len+30, len(y)):
-            y_train = y[:t]
+        # criar janelas só com dados de treino
+        X_train, y_train_seq = create_sequences(y_train, seq_len)
 
-            X_train, y_train_seq = create_univariate_sequences(y_train, seq_len)
+        # treinar modelo 1 vez
+        model = train_rnn(
+            X_train, y_train_seq,
+            hidden_dim, num_layers,
+            epochs, batch_size
+        )
 
-            if len(X_train) < 10:
-                continue
+        # previsão walk-forward REAL
+        preds = [np.nan] * len(y)
 
-            model = _train_model(
-                X_train, y_train_seq,
-                hidden_dim, num_layers, epochs, batch_size
-            )
+        # janela inicial (última parte do treino)
+        janela = y[split-seq_len:split].copy()
 
-            # previsão do retorno em t
-            x_last = y[t-seq_len:t].reshape(1, seq_len, 1)
-            x_last_t = torch.from_numpy(x_last).float()
+        model.eval()
+        for t in range(split, len(y)):
+            x = torch.from_numpy(janela.reshape(1, seq_len, 1)).float().to(device)
 
-            model.eval()
             with torch.no_grad():
-                pred = model(x_last_t).item()
+                pred = model(x).item()
 
-            pred_series[t] = pred
+            preds[t] = pred
 
-        preds_df[col].loc[idx] = pred_series
+            # shift da janela
+            janela = np.roll(janela, -1)
+            janela[-1] = pred   # usa previsão (auto-regressão)
+
+        preds_df[col].loc[idx] = preds
 
     return preds_df
 
