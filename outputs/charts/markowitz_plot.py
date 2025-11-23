@@ -186,6 +186,8 @@ def find_lambda_for_risk(mean_returns, cov_matrix, target_risk, interval=0.01):
 def compare_frontiers(
     models: list,
     window: int,
+    returns_monthly: pd.DataFrame,
+    split_idx: int,
 ):
     """
     Plota fronteiras eficientes para N modelos na ESCALA MENSAL.
@@ -200,44 +202,70 @@ def compare_frontiers(
         "linestyle": str
     }
     """
-    lambdas=np.arange(0, 1.05, 0.01)
+    lambdas=np.arange(0, 1.005, 0.005)
+    actual_backtest_list = [True, False]
+    actual_backtest_list_subplot_idx = [2, 1]
 
 
-    plt.figure(figsize=(14, 9))
+    plt.figure(figsize=(14, 7))
 
-    for model in models:
+    for cc, actual_backtest in enumerate(actual_backtest_list):
+        ret_curve_models = []
+        vol_curve_models = []
+        w_list_models = []
 
-        name = model["name"]
-        mean = model["mean_returns"].copy()
-        cov = model["cov"].copy()
+        for model in models:
+
+            name = model["name"]
+            mean = model["mean_returns"].copy()
+            cov = model["cov"].copy()
 
 
 
-        # ------------ FRONTEIRA λ ------------
-        ret_curve, vol_curve = [], []
-        for lamb in lambdas:
-            w = solve_markowitz(mean, cov, lamb=lamb)
-            ret_curve.append(portfolio_return(w, mean))
-            vol_curve.append(portfolio_volatility(w, cov))
+            # ------------ FRONTEIRA λ ------------ Com backteste
+            ret_curve, vol_curve, w_list = [], [], []
+            for lamb in lambdas:
+                w = solve_markowitz(mean, cov, lamb=lamb)
+                port = returns_monthly[split_idx:]
+                if actual_backtest:
+                    ret_curve.append(portfolio_return(w, port.mean()))
+                    vol_curve.append(portfolio_volatility(w, port.cov()))
+                else:
+                    ret_curve.append(portfolio_return(w, mean))
+                    vol_curve.append(portfolio_volatility(w, cov))
+                w_list.append(w)
 
-        plt.plot(
-            vol_curve, ret_curve,
-            label=f"Fronteira {name}",
-            color=model["color"],
-            linestyle=model["linestyle"],
-            linewidth=2.5,
-            marker='o', markersize=5
-        )
+                # if lamb == 0.37 or lamb==0.65:
+                #     print("Lambda {}, Name: {}, Volatility: {:.4f}, Mean Return: {:.4f}".format(lamb, name,vol_curve[-1], ret_curve[-1]))
+            
+            ret_curve_models.append(ret_curve)
+            vol_curve_models.append(vol_curve)
+            w_list_models.append(w_list)
 
-    plt.title("Comparação de Fronteiras Eficientes — Janela {}".format(window))
-    plt.xlabel("Risco (Volatilidade Janela)")
-    plt.ylabel("Retorno Esperado Janela")
-    plt.grid(True)
-    plt.legend()
+            plt.subplot(1,2,actual_backtest_list_subplot_idx[cc])
+            plt.plot(
+                vol_curve_models[models.index(model)], ret_curve_models[models.index(model)],
+                label=f"Fronteira {name}",
+                color=model["color"],
+                linestyle=model["linestyle"],
+                linewidth=2.5,
+                # marker='o', markersize=5
+            )
+        if actual_backtest:
+            plt.title("Comparação de Fronteiras Eficientes no Backtest —30% TESTE FUTURO")
+            plt.xlabel("Risco Backtest -30% TESTE FUTURO")
+            plt.ylabel("Retorno Backtest-30% TESTE FUTURO")
+        else:
+            plt.title("Comparação de Fronteiras Eficientes no Modelo")
+            plt.xlabel("Risco Modelo")
+            plt.ylabel("Retorno Modelo")
+        plt.grid(True)
+        plt.legend()
+
     plt.tight_layout()
     plt.show()
 
-    return ret_curve, vol_curve, lambdas
+    return ret_curve_models, vol_curve_models, lambdas, w_list_models
 
 
 def compare_time_series(
@@ -292,7 +320,7 @@ def compare_time_series(
             linestyle=model["linestyle"]
         )
 
-    plt.title("Comparação Temporal dos Portfólios (Escala Mensal)")
+    plt.title("Comparação Temporal dos Portfólios (Escala Mensal). Target Risk: {:.2f}".format(target_risk))
     plt.xlabel("Tempo (Mensal)")
     plt.ylabel("Crescimento Acumulado")
     plt.grid(True)
