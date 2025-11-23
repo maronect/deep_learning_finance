@@ -169,155 +169,152 @@ def find_lambda_for_target(mean_returns, cov_matrix, target_return, interval=0.0
             best_lambda = l
     return best_lambda
 
-def find_lambda_for_risk(mean_returns, cov_matrix, target_risk, interval=0.01):
-    best_lambda = None
+
+# --- Helper: Find Lambda ---
+def find_lambda_for_risk(mean_returns, cov_matrix, target_risk):
+    best_lambda = 0.5
     best_diff = float('inf')
-    ret_list, vol_list = markowitz_tradeoff(mean_returns, cov_matrix, interval=interval)
-    lambdas = np.arange(0, 1 + interval, interval)
-    
-    for l, v in zip(lambdas, vol_list):
-        diff = abs(v - target_risk)
-        if diff < best_diff:
-            best_diff = diff
-            best_lambda = l
+    for lamb in np.arange(0, 1.05, 0.05):
+        w = solve_markowitz(mean_returns, cov_matrix, lamb=lamb)
+        if w is None: continue
+        risk = portfolio_volatility(w, cov_matrix)
+        if abs(risk - target_risk) < best_diff:
+            best_diff = abs(risk - target_risk)
+            best_lambda = lamb
     return best_lambda
 
-
-def compare_frontiers(
-    models: list,
-    num_points=4000,
-    lambdas=np.arange(0, 1.05, 0.05),
-):
+# --- 1. Frontier Plot (Static View) ---
+def compare_frontiers(models: list, num_points=2000):
     """
-    Plota fronteiras eficientes para N modelos na ESCALA MENSAL.
-
-    Cada item de 'models':
-    {
-        "name": str,
-        "mean_returns": pd.Series,
-        "cov": pd.DataFrame,
-        "is_monthly": bool,     # True = não converter
-        "color": str,
-        "linestyle": str
-    }
+    Plots Efficient Frontiers comparing Average Characteristics.
     """
-
-    plt.figure(figsize=(14, 9))
+    plt.figure(figsize=(12, 8))
 
     for model in models:
-
         name = model["name"]
-        mean = model["mean_returns"].copy()
-        cov = model["cov"].copy()
+        mean = model["mean_returns"].values if isinstance(model["mean_returns"], pd.Series) else model["mean_returns"]
+        cov = model["cov"].values
         is_monthly = model.get("is_monthly", False)
 
-        # ------------ CONVERSÃO (diário → mensal) ------------
+        # Convert Daily to Monthly for Plotting Consistency
         if not is_monthly:
-            dias = 21
-            mean = (1 + mean) ** dias - 1
-            cov = cov * dias
+            mean = (1 + mean)**21 - 1
+            cov = cov * 21
+            
+        # 1. Simulate Random Portfolios
+        w_rand = np.random.dirichlet(np.ones(len(mean)), size=num_points)
+        rets = np.dot(w_rand, mean)
+        vols = np.sqrt(np.diag(np.dot(w_rand, np.dot(cov, w_rand.T))))
+        
+        plt.scatter(vols, rets, alpha=0.1, color=model["color"], s=10)
 
-        num_assets = len(mean)
-
-        # ------------ SIMULAÇÃO DE CARTEIRAS ------------
-        means_sim, risks_sim = [], []
-        for _ in range(num_points):
-            w = np.random.random(num_assets)
-            w /= np.sum(w)
-
-            ret = np.dot(w, mean)
-            vol = np.sqrt(w.T @ cov @ w)
-
-            means_sim.append(ret)
-            risks_sim.append(vol)
-
-        plt.scatter(
-            risks_sim, means_sim,
-            label=f"{name} (simulado)",
-            alpha=0.25,
-            color=model["color"]
-        )
-
-        # ------------ FRONTEIRA λ ------------
-        ret_curve, vol_curve = [], []
-        for lamb in lambdas:
+        # 2. Trace Efficient Frontier (Lambda Optimization)
+        frontier_ret, frontier_vol = [], []
+        for lamb in np.arange(0, 1.01, 0.05):
             w = solve_markowitz(mean, cov, lamb=lamb)
-            ret_curve.append(portfolio_return(w, mean))
-            vol_curve.append(portfolio_volatility(w, cov))
+            if w is not None:
+                frontier_ret.append(portfolio_return(w, mean))
+                frontier_vol.append(portfolio_volatility(w, cov))
+        
+        plt.plot(frontier_vol, frontier_ret, label=f"{name}", color=model["color"], linewidth=3)
 
-        plt.plot(
-            vol_curve, ret_curve,
-            label=f"Fronteira {name}",
-            color=model["color"],
-            linestyle=model["linestyle"],
-            linewidth=2.5
-        )
-
-    plt.title("Comparação de Fronteiras Eficientes — Escala Mensal")
-    plt.xlabel("Risco (Volatilidade Mensal)")
-    plt.ylabel("Retorno Esperado Mensal")
-    plt.grid(True)
+    plt.title("Efficient Frontiers Comparison (Monthly Scale)")
+    plt.xlabel("Monthly Volatility (Risk)")
+    plt.ylabel("Monthly Expected Return")
     plt.legend()
-    plt.tight_layout()
+    plt.grid(True, alpha=0.3)
     plt.show()
 
-
-def compare_time_series(
-    returns_daily: pd.DataFrame,
-    models: list,
-    target_risk=0.1
-):
+# --- 2. Time Series Plot (Dynamic Backtest) ---
+def compare_time_series(returns_daily: pd.DataFrame, models: list, target_risk_annual=0.15):
     """
-    Compara o crescimento acumulado mensal de N modelos.
-
-    Cada item de 'models':
-    {
-        "name": str,
-        "mean_returns": pd.Series,
-        "cov": pd.DataFrame,
-        "color": str,
-        "linestyle": str
-    }
+    Backtests strategies. 
+    If a model has 'pred_series', it rebalances monthly using those predictions.
+    If not, it calculates static weights based on the provided mean/cov.
     """
-
-    plt.figure(figsize=(14, 8))
+    plt.figure(figsize=(14, 7))
+    
+    # Target risk logic: convert annual target to monthly/daily proxy for lambda finding
+    target_risk_monthly = target_risk_annual / np.sqrt(12)
 
     for model in models:
-
         name = model["name"]
-        mean = model["mean_returns"]
-        cov = model["cov"]
-        is_monthly = model["is_monthly"]
+        color = model["color"]
+        
+        # A. DYNAMIC MODEL (Has prediction series)
+        if "pred_series" in model and model["pred_series"] is not None:
+            preds = model["pred_series"]
+            # Align dates
+            common_idx = preds.index.intersection(returns_daily.index)
+            sub_preds = preds.loc[common_idx]
+            sub_rets = returns_daily.loc[common_idx]
+            
+            # Monthly Rebalancing
+            # Resample to end of month to find rebalance dates
+            rebalance_dates = sub_rets.resample('ME').last().index
+            
+            portfolio_value = [1.0] # Start at 100%
+            current_weights = np.ones(len(sub_rets.columns)) / len(sub_rets.columns)
+            
+            # Helper to find index location
+            date_map = {d: i for i, d in enumerate(sub_rets.index)}
+            
+            print(f"Backtesting Dynamic: {name}...")
+            
+            daily_curve = []
+            
+            for t in range(len(sub_rets)):
+                curr_date = sub_rets.index[t]
+                
+                # Check Rebalance
+                if curr_date in rebalance_dates or t == 0:
+                    # 1. Get Predicted Return (Next Month approx)
+                    # We average the daily predictions for the next 21 days (proxy)
+                    # or just use today's prediction vector
+                    mu_pred = sub_preds.iloc[t].values 
+                    mu_pred_monthly = (1 + mu_pred)**21 - 1
+                    
+                    # 2. Get Risk (Past 60 days Covariance)
+                    past_slice = sub_rets.iloc[max(0, t-60):t]
+                    if len(past_slice) > 20:
+                        sigma = past_slice.cov().values * 21 # Monthly Cov
+                        
+                        # Find Lambda that targets our risk
+                        lamb = find_lambda_for_risk(mu_pred_monthly, sigma, target_risk_monthly)
+                        w = solve_markowitz(mu_pred_monthly, sigma, lamb)
+                        if w is not None:
+                            current_weights = w
 
-         # ------------ CONVERSÃO (diário → mensal) ------------
-        if not is_monthly:
-            dias = 21
-            mean = (1 + mean) ** dias - 1
-            cov = cov * dias
+                # Apply Returns
+                day_ret = np.dot(current_weights, sub_rets.iloc[t].values)
+                if len(daily_curve) == 0: daily_curve.append(1.0 * (1 + day_ret))
+                else: daily_curve.append(daily_curve[-1] * (1 + day_ret))
+            
+            # Plot
+            plt.plot(sub_rets.index, daily_curve, label=name, color=color)
 
-        lamb = find_lambda_for_risk(mean, cov, target_risk)
+        # B. STATIC MODEL (Benchmark / Historical Markowitz)
+        else:
+            # Calculate ONE set of weights based on provided mean/cov
+            mean = model["mean_returns"]
+            cov = model["cov"]
+            if not model.get("is_monthly", False):
+                mean = (1 + mean)**21 - 1
+                cov = cov * 21
+            
+            lamb = find_lambda_for_risk(mean, cov, target_risk_monthly)
+            weights = solve_markowitz(mean, cov, lamb)
+            
+            # Apply to full history
+            # Resample daily returns to monthly for smoother plotting or keep daily
+            # Let's do cumulative daily
+            daily_port_ret = returns_daily.dot(weights)
+            cum_ret = (1 + daily_port_ret).cumprod()
+            
+            plt.plot(cum_ret.index, cum_ret, label=f"{name} (Static)", color=color, linestyle="--")
 
-        weights = solve_markowitz(mean, cov, lamb=lamb)
-
-        print(lamb, name, portfolio_volatility(weights, cov), portfolio_return(weights, mean))
-
-        port_monthly = returns_daily.resample("ME").agg(lambda x: (1 + x).prod() - 1)
-        port_monthly = port_monthly.dot(weights)
-
-        acum = (1 + port_monthly).cumprod()
-
-        plt.plot(
-            acum.index, acum,
-            label=name,
-            linewidth=2,
-            color=model["color"],
-            linestyle=model["linestyle"]
-        )
-
-    plt.title("Comparação Temporal dos Portfólios (Escala Mensal)")
-    plt.xlabel("Tempo (Mensal)")
-    plt.ylabel("Crescimento Acumulado")
-    plt.grid(True)
+    plt.title(f"Cumulative Performance (Target Annual Vol ~ {target_risk_annual*100:.0f}%)")
+    plt.ylabel("Growth of $1")
     plt.legend()
-    plt.tight_layout()
+    plt.grid(True, alpha=0.3)
     plt.show()
