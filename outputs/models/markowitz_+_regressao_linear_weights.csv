@@ -1,10 +1,10 @@
 Ticker,Weight,Model
-PETR4.SA,2.2674281433913513e-16,Markowitz + Regressao Linear
-VALE3.SA,0.2811415679441391,Markowitz + Regressao Linear
+PETR4.SA,0.0,Markowitz + Regressao Linear
+VALE3.SA,0.28114070361052756,Markowitz + Regressao Linear
 ITUB4.SA,0.0,Markowitz + Regressao Linear
 BBDC4.SA,0.0,Markowitz + Regressao Linear
-BBAS3.SA,4.388238994824349e-17,Markowitz + Regressao Linear
+BBAS3.SA,0.0,Markowitz + Regressao Linear
 ABEV3.SA,0.0,Markowitz + Regressao Linear
-WEGE3.SA,1.6355723132053333e-16,Markowitz + Regressao Linear
-B3SA3.SA,0.013005389772884015,Markowitz + Regressao Linear
-GGBR4.SA,0.7058530422829767,Markowitz + Regressao Linear
+WEGE3.SA,9.060892115801202e-18,Markowitz + Regressao Linear
+B3SA3.SA,0.013004853838546495,Markowitz + Regressao Linear
+GGBR4.SA,0.7058544425509264,Markowitz + Regressao Linear
