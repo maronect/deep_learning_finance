@@ -42,19 +42,52 @@ def minimize_volatility(mean_returns, cov_matrix):
         return None
 
 
-def solve_markowitz(mean_returns, cov_matrix,lamb):
+def solve_markowitz(mean_returns, cov_matrix, lamb, max_weight=None):
+    """
+    Resolve o problema de otimização de Markowitz.
+    
+    Parâmetros:
+    -----------
+    mean_returns : array-like
+        Retornos esperados dos ativos
+    cov_matrix : array-like
+        Matriz de covariância
+    lamb : float
+        Parâmetro de trade-off risco-retorno (0 = max retorno, 1 = min risco)
+    max_weight : float, optional
+        Peso máximo por ativo (para diversificação). Se None, sem limite.
+    
+    Retorna:
+    --------
+    array
+        Pesos ótimos do portfólio
+    """
     num_assets = len(mean_returns)
     constraints = [
-        {'type': 'eq', 'fun': lambda x: np.sum(x) - 1}, #soma dos pesos = 1
-        #{'type': 'eq', 'fun': lambda x: portfolio_return(x, mean_returns) - target_return} # retorno alvo do portoflio deve ser = ao escolhido
+        {'type': 'eq', 'fun': lambda x: np.sum(x) - 1}  # soma dos pesos = 1
     ]
-    bounds = tuple((0, 1) for _ in range(num_assets)) # pesos devem ser valores entre 0 e 1
-    initial_guess = num_assets * [1. / num_assets] # a principio mesmo peso para todos
-    result = minimize(markowitz_objective, initial_guess, args=(mean_returns, cov_matrix,lamb),
-                      method='SLSQP', bounds=bounds, constraints=constraints)
+    
+    # Bounds: se max_weight especificado, limitar peso máximo
+    if max_weight is not None:
+        bounds = tuple((0, max_weight) for _ in range(num_assets))
+    else:
+        bounds = tuple((0, 1) for _ in range(num_assets))
+    
+    initial_guess = num_assets * [1. / num_assets]
+    
+    result = minimize(
+        markowitz_objective, 
+        initial_guess, 
+        args=(mean_returns, cov_matrix, lamb),
+        method='SLSQP', 
+        bounds=bounds, 
+        constraints=constraints
+    )
+    
     if result.success:
         return result.x
     else:
-        print("Erro na otimização Sharpe:", result.message)
-        return None
+        print(f"Erro na otimização Markowitz: {result.message}")
+        # Retorna pesos iguais como fallback
+        return np.array([1. / num_assets] * num_assets)
 

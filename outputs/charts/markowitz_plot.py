@@ -295,7 +295,7 @@ def compare_time_series(
         cov = model["cov"]
         is_monthly = model["is_monthly"]
 
-         # ------------ CONVERSÃO (diário → mensal) ------------
+         # ------------ CONVERSÃO (diário -> mensal) ------------
         if not is_monthly:
             dias = 21
             mean = (1 + mean) ** dias - 1
