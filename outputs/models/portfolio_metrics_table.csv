@@ -1,4 +1,4 @@
 Model,Sharpe,Annualized_Return,Annualized_Volatility,Cumulative_Return
-Markowitz Classico,0.5247,34.83%,30.88%,4.50x
-Markowitz + Regressao Linear,0.4901,33.15%,30.45%,4.20x
-Markowitz + MLP,0.5154,31.41%,26.34%,4.15x
+Markowitz Classico,0.5432,33.16%,27.48%,4.41x
+Markowitz + Regressao Linear,0.5911,35.73%,28.56%,4.86x
+Markowitz + MLP,0.5718,34.33%,27.66%,4.63x

@@ -71,11 +71,15 @@ def predict_mean_returns(
         X_test = X_scaled[split_idx:]   # nao usar, leakage
         y_test = y.values[split_idx:] 
         
-        if model_machine_learning == 'LinearRegression':
-            model = LinearRegression()   # O X MARCA O TESOURO XXXXXXXXXXXXXXXXXXXXX (matar regressao antes!)
+        if model_machine_learning == 'Ridge':
+            model = Ridge(alpha=1.0)
+
+        elif model_machine_learning == 'LinearRegression':
+            model = LinearRegression()
+
         elif model_machine_learning == 'MLPRegressor':
             model = MLPRegressor(
-                hidden_layer_sizes=(50, 50),  # two hidden layers with 50 neurons each
+                hidden_layer_sizes=(50, 50),
                 activation="relu",
                 solver="adam",
                 learning_rate_init=1e-3,
