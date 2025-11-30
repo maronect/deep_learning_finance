@@ -169,11 +169,25 @@ def find_lambda_for_target(mean_returns, cov_matrix, target_return, interval=0.0
             best_lambda = l
     return best_lambda
 
+def find_lambda_for_risk(mean_returns, cov_matrix, target_risk, interval=0.01):
+    best_lambda = None
+    best_diff = float('inf')
+    ret_list, vol_list = markowitz_tradeoff(mean_returns, cov_matrix, interval=interval)
+    lambdas = np.arange(0, 1 + interval, interval)
+    
+    for l, v in zip(lambdas, vol_list):
+        diff = abs(v - target_risk)
+        if diff < best_diff:
+            best_diff = diff
+            best_lambda = l
+    return best_lambda
+
 
 def compare_frontiers(
     models: list,
-    num_points=4000,
-    lambdas=np.arange(0, 1.05, 0.05),
+    window: int,
+    returns_monthly: pd.DataFrame,
+    split_idx: int,
 ):
     """
     Plota fronteiras eficientes para N modelos na ESCALA MENSAL.
@@ -188,71 +202,76 @@ def compare_frontiers(
         "linestyle": str
     }
     """
+    lambdas=np.arange(0, 1.005, 0.005)
+    actual_backtest_list = [True, False]
+    actual_backtest_list_subplot_idx = [2, 1]
 
-    plt.figure(figsize=(14, 9))
 
-    for model in models:
+    plt.figure(figsize=(14, 7))
 
-        name = model["name"]
-        mean = model["mean_returns"].copy()
-        cov = model["cov"].copy()
-        is_monthly = model.get("is_monthly", False)
+    for cc, actual_backtest in enumerate(actual_backtest_list):
+        ret_curve_models = []
+        vol_curve_models = []
+        w_list_models = []
 
-        # ------------ CONVERSÃO (diário → mensal) ------------
-        if not is_monthly:
-            dias = 21
-            mean = (1 + mean) ** dias - 1
-            cov = cov * dias
+        for model in models:
 
-        num_assets = len(mean)
+            name = model["name"]
+            mean = model["mean_returns"].copy()
+            cov = model["cov"].copy()
 
-        # ------------ SIMULAÇÃO DE CARTEIRAS ------------
-        means_sim, risks_sim = [], []
-        for _ in range(num_points):
-            w = np.random.random(num_assets)
-            w /= np.sum(w)
 
-            ret = np.dot(w, mean)
-            vol = np.sqrt(w.T @ cov @ w)
 
-            means_sim.append(ret)
-            risks_sim.append(vol)
+            # ------------ FRONTEIRA λ ------------ Com backteste
+            ret_curve, vol_curve, w_list = [], [], []
+            for lamb in lambdas:
+                w = solve_markowitz(mean, cov, lamb=lamb)
+                port = returns_monthly[split_idx:]
+                if actual_backtest:
+                    ret_curve.append(portfolio_return(w, port.mean()))
+                    vol_curve.append(portfolio_volatility(w, port.cov()))
+                else:
+                    ret_curve.append(portfolio_return(w, mean))
+                    vol_curve.append(portfolio_volatility(w, cov))
+                w_list.append(w)
 
-        plt.scatter(
-            risks_sim, means_sim,
-            label=f"{name} (simulado)",
-            alpha=0.25,
-            color=model["color"]
-        )
+                # if lamb == 0.37 or lamb==0.65:
+                #     print("Lambda {}, Name: {}, Volatility: {:.4f}, Mean Return: {:.4f}".format(lamb, name,vol_curve[-1], ret_curve[-1]))
+            
+            ret_curve_models.append(ret_curve)
+            vol_curve_models.append(vol_curve)
+            w_list_models.append(w_list)
 
-        # ------------ FRONTEIRA λ ------------
-        ret_curve, vol_curve = [], []
-        for lamb in lambdas:
-            w = solve_markowitz(mean, cov, lamb=lamb)
-            ret_curve.append(portfolio_return(w, mean))
-            vol_curve.append(portfolio_volatility(w, cov))
+            plt.subplot(1,2,actual_backtest_list_subplot_idx[cc])
+            plt.plot(
+                vol_curve_models[models.index(model)], ret_curve_models[models.index(model)],
+                label=f"Fronteira {name}",
+                color=model["color"],
+                linestyle=model["linestyle"],
+                linewidth=2.5,
+                # marker='o', markersize=5
+            )
+        if actual_backtest:
+            plt.title("Comparação de Fronteiras Eficientes no Backtest —30% TESTE FUTURO")
+            plt.xlabel("Risco Backtest -30% TESTE FUTURO")
+            plt.ylabel("Retorno Backtest-30% TESTE FUTURO")
+        else:
+            plt.title("Comparação de Fronteiras Eficientes no Modelo")
+            plt.xlabel("Risco Modelo")
+            plt.ylabel("Retorno Modelo")
+        plt.grid(True)
+        plt.legend()
 
-        plt.plot(
-            vol_curve, ret_curve,
-            label=f"Fronteira {name}",
-            color=model["color"],
-            linestyle=model["linestyle"],
-            linewidth=2.5
-        )
-
-    plt.title("Comparação de Fronteiras Eficientes — Escala Mensal")
-    plt.xlabel("Risco (Volatilidade Mensal)")
-    plt.ylabel("Retorno Esperado Mensal")
-    plt.grid(True)
-    plt.legend()
     plt.tight_layout()
     plt.show()
+
+    return ret_curve_models, vol_curve_models, lambdas, w_list_models
 
 
 def compare_time_series(
     returns_daily: pd.DataFrame,
     models: list,
-    lamb=0.5
+    target_risk=0.1
 ):
     """
     Compara o crescimento acumulado mensal de N modelos.
@@ -274,12 +293,22 @@ def compare_time_series(
         name = model["name"]
         mean = model["mean_returns"]
         cov = model["cov"]
+        is_monthly = model["is_monthly"]
+
+         # ------------ CONVERSÃO (diário -> mensal) ------------
+        if not is_monthly:
+            dias = 21
+            mean = (1 + mean) ** dias - 1
+            cov = cov * dias
+
+        lamb = find_lambda_for_risk(mean, cov, target_risk)
 
         weights = solve_markowitz(mean, cov, lamb=lamb)
 
-        port_daily = returns_daily.dot(weights)
+        print(lamb, name, portfolio_volatility(weights, cov), portfolio_return(weights, mean))
 
-        port_monthly = port_daily.resample("ME").agg(lambda x: (1 + x).prod() - 1)
+        port_monthly = returns_daily.resample("ME").agg(lambda x: (1 + x).prod() - 1)
+        port_monthly = port_monthly.dot(weights)
 
         acum = (1 + port_monthly).cumprod()
 
@@ -291,7 +320,7 @@ def compare_time_series(
             linestyle=model["linestyle"]
         )
 
-    plt.title("Comparação Temporal dos Portfólios (Escala Mensal)")
+    plt.title("Comparação Temporal dos Portfólios (Escala Mensal). Target Risk: {:.2f}".format(target_risk))
     plt.xlabel("Tempo (Mensal)")
     plt.ylabel("Crescimento Acumulado")
     plt.grid(True)
