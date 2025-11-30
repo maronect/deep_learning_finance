@@ -199,3 +199,95 @@ def inspect_coefficients(prices: pd.DataFrame, window: int = 5):
         coefs[col] = model.coef_
 
     return coefs
+
+
+def evaluate_models_monthly(
+    returns: pd.DataFrame,
+    window: int,
+    split_idx: int,
+    model_types: list = ['Ridge', 'MLPRegressor']
+):
+    """
+    Avalia o desempenho preditivo dos modelos (Ridge e MLP) para cada ativo,
+    usando dados mensais e uma divisão treino/teste específica.
+    
+    Parâmetros:
+    -----------
+    returns : pd.DataFrame
+        Retornos mensais dos ativos
+    window : int
+        Janela de features (lags)
+    split_idx : int
+        Índice para divisão treino/teste
+    model_types : list
+        Lista de tipos de modelos a avaliar ['Ridge', 'MLPRegressor']
+    
+    Retorna:
+    --------
+    pd.DataFrame
+        DataFrame com MSE, R² e correlação para cada modelo e cada ativo
+    """
+    from sklearn.metrics import mean_squared_error, r2_score
+    
+    # Criar features
+    X = create_features(returns, window=window)
+    X_scaled = X  # Sem scaling, como em predict_mean_returns
+    
+    results = []
+    
+    for col in returns.columns:
+        y = returns[col].loc[X.index].values
+        X_train, X_test = X_scaled[:split_idx], X_scaled[split_idx:]
+        y_train, y_test = y[:split_idx], y[split_idx:]
+        
+        for model_type in model_types:
+            # Treinar modelo
+            if model_type == 'Ridge':
+                model = Ridge(alpha=1.0)
+            elif model_type == 'MLPRegressor':
+                model = MLPRegressor(
+                    hidden_layer_sizes=(50, 50),
+                    activation="relu",
+                    solver="adam",
+                    learning_rate_init=1e-3,
+                    max_iter=1000,
+                    random_state=42
+                )
+            else:
+                continue
+            
+            model.fit(X_train, y_train)
+            
+            # Predição recursiva (sem leakage) - mesma lógica de predict_mean_returns
+            y_pred = []
+            returns_modified = returns.copy()
+            N_test = len(y_test)
+            
+            for i in range(N_test):
+                # Recalcula features usando apenas dados até o ponto atual
+                returns_available = returns_modified.iloc[:split_idx + i]
+                X_current = create_features(returns_available, window=window)
+                X_current_scaled = X_current.iloc[[-1]]  # última linha
+                
+                # Prediz próximo retorno
+                y_pred_i = model.predict(X_current_scaled)[0]
+                y_pred.append(y_pred_i)
+                
+                # Atualiza o DataFrame com a previsão para usar no próximo passo
+                col_idx = list(returns.columns).index(col)
+                returns_modified.iloc[split_idx + i, col_idx] = y_pred_i
+            
+            # Calcular métricas
+            mse = mean_squared_error(y_test, y_pred)
+            r2 = r2_score(y_test, y_pred)
+            corr = np.corrcoef(y_test, y_pred)[0, 1] if len(y_test) > 1 else np.nan
+            
+            results.append({
+                "Ticker": col,
+                "Modelo": model_type,
+                "MSE": mse,
+                "R²": r2,
+                "Correlação": corr
+            })
+    
+    return pd.DataFrame(results)

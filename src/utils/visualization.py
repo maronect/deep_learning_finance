@@ -33,7 +33,10 @@ def plot_efficient_frontier_comparison(
     figsize : tuple
         Tamanho da figura
     """
-    plt.figure(figsize=figsize)
+    # Configurar tamanho de fonte maior
+    plt.rcParams.update({'font.size': 14})
+    
+    fig, ax = plt.subplots(figsize=figsize)
     
     lambdas = np.arange(0, 1.01, 0.01)
     
@@ -56,28 +59,42 @@ def plot_efficient_frontier_comparison(
                 ret_curve.append(ret)
                 vol_curve.append(vol)
         
-        plt.plot(
-            vol_curve, ret_curve,
+        # Converter retornos para porcentagem
+        ret_curve_pct = [r * 100 for r in ret_curve]
+        
+        ax.plot(
+            vol_curve, ret_curve_pct,
             label=name,
             color=color,
             linestyle=linestyle,
-            linewidth=2
+            linewidth=2.5
         )
     
-    plt.xlabel("Volatilidade (Risco)")
-    plt.ylabel("Retorno Esperado")
-    plt.title("Comparação de Fronteiras Eficientes")
-    plt.grid(True, alpha=0.3)
-    plt.legend()
+    ax.set_xlabel("Volatilidade (Risco)", fontsize=16, fontweight='bold')
+    ax.set_ylabel("Retorno Esperado (%)", fontsize=16, fontweight='bold')
+    ax.set_title("Comparação de Fronteiras Eficientes", fontsize=18, fontweight='bold', pad=20)
+    
+    # Grade mais visível
+    ax.grid(True, alpha=0.5, linestyle='--', linewidth=0.8)
+    ax.set_axisbelow(True)
+    
+    # Legenda com fonte maior
+    ax.legend(fontsize=13, framealpha=0.9, loc='best')
+    
+    # Ajustar tamanho dos ticks
+    ax.tick_params(axis='both', which='major', labelsize=13)
+    
     plt.tight_layout()
     
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.savefig(save_path, dpi=300, bbox_inches='tight', format='png')
         print(f"Gráfico salvo em: {save_path}")
     else:
         plt.show()
     
     plt.close()
+    # Restaurar configuração padrão
+    plt.rcParams.update({'font.size': 10})
 
 
 def plot_portfolio_timeseries(
@@ -118,7 +135,10 @@ def plot_portfolio_timeseries(
     figsize : tuple
         Tamanho da figura
     """
-    plt.figure(figsize=figsize)
+    # Configurar tamanho de fonte maior
+    plt.rcParams.update({'font.size': 14})
+    
+    fig, ax = plt.subplots(figsize=figsize)
     
     test_returns = returns.iloc[split_idx:]
     
@@ -150,28 +170,45 @@ def plot_portfolio_timeseries(
             portfolio_ret = test_returns.dot(weights)
             acum = (1 + portfolio_ret).cumprod()
             
-            plt.plot(
+            ax.plot(
                 acum.index, acum,
                 label=name,
-                linewidth=2,
+                linewidth=2.5,
                 color=color,
                 linestyle=linestyle
             )
     
-    plt.title("Comparação Temporal dos Portfólios (Backtest)")
-    plt.xlabel("Tempo (Mensal)")
-    plt.ylabel("Crescimento Acumulado")
-    plt.grid(True, alpha=0.3)
-    plt.legend()
+    ax.set_title("Comparação Temporal dos Portfólios (Backtest)", fontsize=18, fontweight='bold', pad=20)
+    ax.set_xlabel("Tempo (Mensal)", fontsize=16, fontweight='bold')
+    ax.set_ylabel("Crescimento Acumulado", fontsize=16, fontweight='bold')
+    
+    # Grade mais visível
+    ax.grid(True, alpha=0.5, linestyle='--', linewidth=0.8)
+    ax.set_axisbelow(True)
+    
+    # Legenda com fonte maior
+    ax.legend(fontsize=13, framealpha=0.9, loc='best')
+    
+    # Ajustar tamanho dos ticks
+    ax.tick_params(axis='both', which='major', labelsize=13)
+    
+    # Formatar eixo Y para mostrar valores como múltiplos (ex: 1x, 2x, 3x)
+    from matplotlib.ticker import FuncFormatter
+    def format_multiplier(x, pos):
+        return f'{x:.1f}x'
+    ax.yaxis.set_major_formatter(FuncFormatter(format_multiplier))
+    
     plt.tight_layout()
     
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.savefig(save_path, dpi=300, bbox_inches='tight', format='png')
         print(f"Gráfico salvo em: {save_path}")
     else:
         plt.show()
     
     plt.close()
+    # Restaurar configuração padrão
+    plt.rcParams.update({'font.size': 10})
 
 
 def plot_covariance_heatmap(
@@ -208,7 +245,7 @@ def plot_covariance_heatmap(
     plt.tight_layout()
     
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.savefig(save_path, dpi=300, bbox_inches='tight', format='png')
         print(f"Gráfico salvo em: {save_path}")
     else:
         plt.show()
@@ -253,7 +290,7 @@ def plot_predicted_returns_histogram(
     plt.tight_layout()
     
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.savefig(save_path, dpi=300, bbox_inches='tight', format='png')
         print(f"Gráfico salvo em: {save_path}")
     else:
         plt.show()
@@ -278,33 +315,46 @@ def plot_sharpe_comparison(
     figsize : tuple
         Tamanho da figura
     """
-    plt.figure(figsize=figsize)
+    # Configurar tamanho de fonte maior
+    plt.rcParams.update({'font.size': 14})
+    
+    fig, ax = plt.subplots(figsize=figsize)
     
     models = metrics_df['Model'].values
     sharpe_values = metrics_df['Sharpe'].values
     
     colors = plt.cm.viridis(np.linspace(0, 1, len(models)))
-    bars = plt.bar(models, sharpe_values, color=colors, edgecolor='black', alpha=0.7)
+    bars = ax.bar(models, sharpe_values, color=colors, edgecolor='black', alpha=0.7, linewidth=1.5)
     
-    # Adiciona valores nas barras
+    # Adiciona valores nas barras com fonte maior
     for bar in bars:
         height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width()/2., height,
+        ax.text(bar.get_x() + bar.get_width()/2., height,
                 f'{height:.3f}',
-                ha='center', va='bottom')
+                ha='center', va='bottom',
+                fontsize=14, fontweight='bold')
     
-    plt.title("Comparativo de Índice de Sharpe por Modelo")
-    plt.ylabel("Sharpe Ratio")
-    plt.xlabel("Modelo")
-    plt.xticks(rotation=45, ha='right')
-    plt.grid(True, alpha=0.3, axis='y')
+    ax.set_title("Comparativo de Índice de Sharpe por Modelo", fontsize=18, fontweight='bold', pad=20)
+    ax.set_ylabel("Sharpe Ratio", fontsize=16, fontweight='bold')
+    ax.set_xlabel("Modelo", fontsize=16, fontweight='bold')
+    ax.set_xticklabels(models, rotation=45, ha='right', fontsize=13)
+    
+    # Grade mais visível
+    ax.grid(True, alpha=0.5, linestyle='--', linewidth=0.8, axis='y')
+    ax.set_axisbelow(True)
+    
+    # Ajustar tamanho dos ticks
+    ax.tick_params(axis='both', which='major', labelsize=13)
+    
     plt.tight_layout()
     
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.savefig(save_path, dpi=300, bbox_inches='tight', format='png')
         print(f"Gráfico salvo em: {save_path}")
     else:
         plt.show()
     
     plt.close()
+    # Restaurar configuração padrão
+    plt.rcParams.update({'font.size': 10})
 
