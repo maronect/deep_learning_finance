@@ -7,12 +7,15 @@ import pandas as pd
 import seaborn as sns
 from pathlib import Path
 from src.optimization.markowitz import portfolio_return, portfolio_volatility
+from src.utils.portfolio_utils import get_optimal_portfolio_max_sharpe
 
 
 def plot_efficient_frontier_comparison(
     models: list,
     save_path: str = None,
-    figsize: tuple = (12, 8)
+    figsize: tuple = (12, 8),
+    risk_free_rate: float = 0.0,
+    highlight_sharpe: bool = True
 ):
     """
     Plota comparação de fronteiras eficientes para múltiplos modelos.
@@ -32,6 +35,10 @@ def plot_efficient_frontier_comparison(
         Caminho para salvar a figura
     figsize : tuple
         Tamanho da figura
+    risk_free_rate : float, optional
+        Taxa livre de risco (no período) para cálculo do Sharpe Ratio
+    highlight_sharpe : bool, optional
+        Se True, destaca o portfólio ótimo por Sharpe Ratio em cada modelo
     """
     # Configurar tamanho de fonte maior
     plt.rcParams.update({'font.size': 14})
@@ -69,16 +76,50 @@ def plot_efficient_frontier_comparison(
             linestyle=linestyle,
             linewidth=2.5
         )
+        
+        # Destacar portfólio ótimo por Sharpe Ratio
+        if highlight_sharpe:
+            try:
+                optimal_weights = get_optimal_portfolio_max_sharpe(
+                    mean,
+                    cov,
+                    risk_free_rate=risk_free_rate
+                )
+                
+                if optimal_weights is not None:
+                    optimal_ret = portfolio_return(optimal_weights, mean)
+                    optimal_vol = portfolio_volatility(optimal_weights, cov)
+                    optimal_ret_pct = optimal_ret * 100
+                    
+                    # Marcar o ponto com uma estrela usando a cor do modelo
+                    ax.scatter(
+                        optimal_vol, optimal_ret_pct,
+                        s=300,  # Tamanho grande do marcador
+                        color='red',
+                        edgecolors='black',
+                        linewidths=1.5,
+                        marker='*',  # Estrela para destacar
+                        zorder=5  # Garantir que fique acima da linha
+                    )
+            except Exception as e:
+                # Se houver erro ao calcular Sharpe, apenas continua sem destacar
+                pass
     
-    ax.set_xlabel("Volatilidade (Risco)", fontsize=16, fontweight='bold')
-    ax.set_ylabel("Retorno Esperado (%)", fontsize=16, fontweight='bold')
-    ax.set_title("Comparação de Fronteiras Eficientes", fontsize=18, fontweight='bold', pad=20)
+    # Adicionar entrada na legenda para as estrelas (apenas uma vez)
+    if highlight_sharpe:
+        ax.scatter([], [], s=300, color='red', edgecolors='black', 
+                   linewidths=1.5, marker='*', 
+                   label='Maximum Sharpe Ratio Portfolio', zorder=5)
+    
+    ax.set_xlabel("Volatility (Risk)", fontsize=16, fontweight='bold')
+    ax.set_ylabel("Expected Return (%)", fontsize=16, fontweight='bold')
+    ax.set_title("Efficient Frontier Comparison", fontsize=18, fontweight='bold', pad=20)
     
     # Grade mais visível
     ax.grid(True, alpha=0.5, linestyle='--', linewidth=0.8)
     ax.set_axisbelow(True)
     
-    # Legenda com fonte maior
+    # Legenda com fonte maior - inclui as fronteiras e a indicação das estrelas
     ax.legend(fontsize=13, framealpha=0.9, loc='best')
     
     # Ajustar tamanho dos ticks
@@ -87,8 +128,14 @@ def plot_efficient_frontier_comparison(
     plt.tight_layout()
     
     if save_path:
+        # Garantir que o caminho seja uma string e tenha extensão .png
+        save_path = str(save_path)
+        if not save_path.lower().endswith('.png'):
+            save_path = save_path + '.png'
+        
+        # Salvar figura explicitamente como PNG
         plt.savefig(save_path, dpi=300, bbox_inches='tight', format='png')
-        print(f"Gráfico salvo em: {save_path}")
+        print(f"Chart saved at: {save_path}")
     else:
         plt.show()
     
@@ -178,9 +225,9 @@ def plot_portfolio_timeseries(
                 linestyle=linestyle
             )
     
-    ax.set_title("Comparação Temporal dos Portfólios (Backtest)", fontsize=18, fontweight='bold', pad=20)
-    ax.set_xlabel("Tempo (Mensal)", fontsize=16, fontweight='bold')
-    ax.set_ylabel("Crescimento Acumulado", fontsize=16, fontweight='bold')
+    ax.set_title("Portfolio Time Series Comparison (Backtest)", fontsize=18, fontweight='bold', pad=20)
+    ax.set_xlabel("Time (Monthly)", fontsize=16, fontweight='bold')
+    ax.set_ylabel("Cumulative Growth", fontsize=16, fontweight='bold')
     
     # Grade mais visível
     ax.grid(True, alpha=0.5, linestyle='--', linewidth=0.8)
@@ -202,7 +249,7 @@ def plot_portfolio_timeseries(
     
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight', format='png')
-        print(f"Gráfico salvo em: {save_path}")
+        print(f"Chart saved at: {save_path}")
     else:
         plt.show()
     
@@ -241,12 +288,12 @@ def plot_covariance_heatmap(
         cbar_kws={"shrink": 0.8}
     )
     
-    plt.title("Matriz de Covariância dos Ativos")
+    plt.title("Asset Covariance Matrix")
     plt.tight_layout()
     
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight', format='png')
-        print(f"Gráfico salvo em: {save_path}")
+        print(f"Chart saved at: {save_path}")
     else:
         plt.show()
     
@@ -276,22 +323,22 @@ def plot_predicted_returns_histogram(
     fig, axes = plt.subplots(1, 2, figsize=figsize)
     
     axes[0].hist(lr_predictions.values, bins=20, alpha=0.7, color='blue', edgecolor='black')
-    axes[0].set_title("Distribuição dos Retornos Previstos - Regressão Linear")
-    axes[0].set_xlabel("Retorno Previsto")
-    axes[0].set_ylabel("Frequência")
+    axes[0].set_title("Predicted Returns Distribution - Linear Regression")
+    axes[0].set_xlabel("Predicted Return")
+    axes[0].set_ylabel("Frequency")
     axes[0].grid(True, alpha=0.3)
     
     axes[1].hist(mlp_predictions.values, bins=20, alpha=0.7, color='orange', edgecolor='black')
-    axes[1].set_title("Distribuição dos Retornos Previstos - MLP")
-    axes[1].set_xlabel("Retorno Previsto")
-    axes[1].set_ylabel("Frequência")
+    axes[1].set_title("Predicted Returns Distribution - MLP")
+    axes[1].set_xlabel("Predicted Return")
+    axes[1].set_ylabel("Frequency")
     axes[1].grid(True, alpha=0.3)
     
     plt.tight_layout()
     
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight', format='png')
-        print(f"Gráfico salvo em: {save_path}")
+        print(f"Chart saved at: {save_path}")
     else:
         plt.show()
     
@@ -334,9 +381,9 @@ def plot_sharpe_comparison(
                 ha='center', va='bottom',
                 fontsize=14, fontweight='bold')
     
-    ax.set_title("Comparativo de Índice de Sharpe por Modelo", fontsize=18, fontweight='bold', pad=20)
+    ax.set_title("Sharpe Ratio Comparison by Model", fontsize=18, fontweight='bold', pad=20)
     ax.set_ylabel("Sharpe Ratio", fontsize=16, fontweight='bold')
-    ax.set_xlabel("Modelo", fontsize=16, fontweight='bold')
+    ax.set_xlabel("Model", fontsize=16, fontweight='bold')
     ax.set_xticklabels(models, rotation=45, ha='right', fontsize=13)
     
     # Grade mais visível
@@ -350,7 +397,7 @@ def plot_sharpe_comparison(
     
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight', format='png')
-        print(f"Gráfico salvo em: {save_path}")
+        print(f"Chart saved at: {save_path}")
     else:
         plt.show()
     
