@@ -29,7 +29,7 @@ def plot_efficient_frontier(returns: pd.Series, cov_matrix, optimized_weights=No
     
     plt.figure(figsize=(10, 6))
     scatter = plt.scatter(risks, means, c=np.array(means)/np.array(risks), marker='o', cmap='viridis', alpha=0.5)
-    plt.colorbar(scatter, label='Retorno/Risco (simulado')
+    plt.colorbar(scatter, label='Return/Risk (simulated)')
 
     if add_tradeoff_curve:
         lamb_array = np.arange(0.0, 1.05, 0.05)
@@ -44,17 +44,17 @@ def plot_efficient_frontier(returns: pd.Series, cov_matrix, optimized_weights=No
                 ret_list.append(ret)
                 vol_list.append(vol)
 
-        plt.plot(vol_list, ret_list, color='orange', linestyle='--', linewidth=2, label='Fronteira Teórica (λ)')
+        plt.plot(vol_list, ret_list, color='orange', linestyle='--', linewidth=2, label='Theoretical Frontier (λ)')
 
     # Portfólio ótimo
     if optimized_weights is not None:
         opt_return = np.dot(optimized_weights, returns)
         opt_risk = np.sqrt(np.dot(optimized_weights.T, np.dot(cov_matrix, optimized_weights)))
-        plt.scatter(opt_risk, opt_return, marker='*', color='red', s=200, label='Portfólio Ótimo')
+        plt.scatter(opt_risk, opt_return, marker='*', color='red', s=200, label='Optimal Portfolio')
 
-    plt.xlabel('Risco (Volatilidade)')
-    plt.ylabel('Retorno Esperado')
-    plt.title('Fronteira Eficiente - Simulação de Carteiras')
+    plt.xlabel('Risk (Volatility)')
+    plt.ylabel('Expected Return')
+    plt.title('Efficient Frontier - Portfolio Simulation')
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
@@ -75,18 +75,18 @@ def plot_time_serie(returns: pd.DataFrame, optimized_weights):
     retorno_portfolio = (1 + returns.dot(optimized_weights)).cumprod()
 
     # Adiciona coluna do portfólio
-    returns_acumulados['Portfólio'] = retorno_portfolio
+    returns_acumulados['Portfolio'] = retorno_portfolio
 
     plt.figure(figsize=(12, 6))
     for coluna in returns_acumulados.columns:
-        #estilo = '-' if coluna != 'Portfólio' else '--'
-        linewidth= 2 if coluna == 'Portfólio' else 1
-        color = 'black' if coluna == 'Portfólio' else None
+        #estilo = '-' if coluna != 'Portfolio' else '--'
+        linewidth= 2 if coluna == 'Portfolio' else 1
+        color = 'black' if coluna == 'Portfolio' else None
         plt.plot(returns_acumulados.index, returns_acumulados[coluna], label=coluna, linestyle='-', linewidth=linewidth, color=color)
 
-    plt.title("Crescimento Acumulado: Ativos Individuais vs. Portfólio Otimizado")
-    plt.xlabel("Data")
-    plt.ylabel("Crescimento Acumulado")
+    plt.title("Cumulative Growth: Individual Assets vs. Optimized Portfolio")
+    plt.xlabel("Date")
+    plt.ylabel("Cumulative Growth")
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
@@ -116,13 +116,13 @@ def compute_benchmark_growth(benchmark_annual_rate, freq, num_periods):
 
 def plot_frontier_line(vol_list, ret_list):
     plt.plot(vol_list, ret_list, marker='o')
-    plt.title("Fronteira Eficiente - Risco vs Retorno")
-    plt.xlabel("Risco (Volatilidade)")
-    plt.ylabel("Retorno Esperado")
+    plt.title("Efficient Frontier - Risk vs Return")
+    plt.xlabel("Risk (Volatility)")
+    plt.ylabel("Expected Return")
     plt.grid()
     plt.show()
 
-def plot_comparison_time_series(returns_daily, returns_monthly,mean_returns_daily, cov_matrix_daily,mean_returns_monthly, cov_matrix_monthly,label_daily="Portfólio Diário", label_monthly="Portfólio Mensal"):
+def plot_comparison_time_series(returns_daily, returns_monthly,mean_returns_daily, cov_matrix_daily,mean_returns_monthly, cov_matrix_monthly,label_daily="Daily Portfolio", label_monthly="Monthly Portfolio"):
     """
     Compara as séries temporais acumuladas dos portfólios ótimo diário e mensal.
 
@@ -148,9 +148,9 @@ def plot_comparison_time_series(returns_daily, returns_monthly,mean_returns_dail
     plt.figure(figsize=(12, 6))
     plt.plot(portfolio_cum_daily.index, portfolio_cum_daily, label=label_daily, color='blue', linewidth=2)
     plt.plot(portfolio_cum_monthly.index, portfolio_cum_monthly, label=label_monthly, color='orange', linewidth=2, linestyle='--')
-    plt.title("Comparação de Desempenho: Portfólios Diário vs Mensal")
-    plt.xlabel("Data")
-    plt.ylabel("Crescimento Acumulado")
+    plt.title("Performance Comparison: Daily vs Monthly Portfolios")
+    plt.xlabel("Date")
+    plt.ylabel("Cumulative Growth")
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
@@ -245,20 +245,20 @@ def compare_frontiers(
             plt.subplot(1,2,actual_backtest_list_subplot_idx[cc])
             plt.plot(
                 vol_curve_models[models.index(model)], ret_curve_models[models.index(model)],
-                label=f"Fronteira {name}",
+                label=f"Frontier {name}",
                 color=model["color"],
                 linestyle=model["linestyle"],
                 linewidth=2.5,
                 # marker='o', markersize=5
             )
         if actual_backtest:
-            plt.title("Comparação de Fronteiras Eficientes no Backtest —30% TESTE FUTURO")
-            plt.xlabel("Risco Backtest -30% TESTE FUTURO")
-            plt.ylabel("Retorno Backtest-30% TESTE FUTURO")
+            plt.title("Efficient Frontier Comparison in Backtest —30% FUTURE TEST")
+            plt.xlabel("Backtest Risk -30% FUTURE TEST")
+            plt.ylabel("Backtest Return -30% FUTURE TEST")
         else:
-            plt.title("Comparação de Fronteiras Eficientes no Modelo")
-            plt.xlabel("Risco Modelo")
-            plt.ylabel("Retorno Modelo")
+            plt.title("Efficient Frontier Comparison in Model")
+            plt.xlabel("Model Risk")
+            plt.ylabel("Model Return")
         plt.grid(True)
         plt.legend()
 
@@ -320,9 +320,9 @@ def compare_time_series(
             linestyle=model["linestyle"]
         )
 
-    plt.title("Comparação Temporal dos Portfólios (Escala Mensal). Target Risk: {:.2f}".format(target_risk))
-    plt.xlabel("Tempo (Mensal)")
-    plt.ylabel("Crescimento Acumulado")
+    plt.title("Portfolio Time Series Comparison (Monthly Scale). Target Risk: {:.2f}".format(target_risk))
+    plt.xlabel("Time (Monthly)")
+    plt.ylabel("Cumulative Growth")
     plt.grid(True)
     plt.legend()
     plt.tight_layout()

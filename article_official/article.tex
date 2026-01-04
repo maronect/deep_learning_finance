@@ -1,0 +1,600 @@
+\documentclass[10pt,twocolumn]{article}
+
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+
+% Layout
+\usepackage{geometry}
+\geometry{a4paper, left=1.5cm, right=1.5cm, top=2cm, bottom=2cm}
+\setlength{\parindent}{0.6cm}
+\setlength{\parskip}{0pt}
+
+% Fonte e matemática
+\usepackage{lmodern}
+\usepackage{amsmath, amssymb}
+
+% Figuras
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{booktabs}
+
+% Listas
+\usepackage{enumitem}
+
+% Links
+\usepackage[colorlinks=true, citecolor=blue, linkcolor=black, urlcolor=blue]{hyperref}
+
+% Bibliografia
+\usepackage[backend=bibtex, style=authoryear, natbib=true]{biblatex}
+\addbibresource{referencias.bib}
+
+% Cabeçalho simples (opcional)
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Portfolio Optimization with ML}
+\lhead{Taques}
+\rfoot{\thepage}
+
+% Título 
+% era:Investment Portfolio Optimization with Machine Learning Applications for Asset Modeling and Allocation 
+\title{\textbf{Investment Portfolio Optimization with Machine Learning-based Asset Modeling}}
+
+\author{
+    Marone Carvalho Taques\\
+    \small Catholic University of Pernambuco\\
+    \small Recife, Brazil\\
+    \small \texttt{maronect@gmail.com}
+    \and
+    Leonardo Machado Cavalcanti\\
+    \small Catholic University of Pernambuco\\
+    \small Recife, Brazil\\
+    \small \texttt{leonardo.cavalcanti@unicap.br}
+}
+
+\date{2025}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+The classical Markowitz mean--variance framework relies on historical return averages and covariances to construct efficient portfolios. However, asset returns in real markets are non-stationary, noisy and potentially nonlinear, which makes expected return estimation particularly fragile. This article investigates whether simple Machine Learning (ML) models---specifically Linear Regression (with regularization) and Multilayer Perceptron (MLP)---can improve expected return estimates used in the Markowitz optimization problem. Using daily data from Brazilian equities, we engineer lag-based features, implement walk-forward forecasting and apply a blending mechanism combining model predictions with historical means. We then compare portfolios based on (i) pure historical mean returns, (ii) Linear Regression forecasts and (iii) MLP forecasts. The study evaluates risk--return trade-offs through Sharpe ratio, volatility, efficient frontiers and allocation stability. The results suggest that portfolios based on the Markowtiz Framework, can achive better risk-return properties, when combined with return forcast, from even the lightweight ML models.
+\end{abstract}
+
+\textbf{Keywords:} Portfolio Optimization, Markowitz, Machine Learning, Linear Regression, MLP, Expected Returns.
+
+\section{Introduction}
+
+The search for income beyond traditional savings accounts has become increasingly common among Brazilian investors, driven by the historical decline in interest rates, currency depreciation, wider access to financial information and the growing democratization of the financial market. In this context, many individuals seek to invest their money in financial assets. However, without the necessary knowledge and tools, they are exposed to risks that could be mitigated with appropriate quantitative approaches.
+
+One of the main challenges faced by investors is related to market volatility and uncertainty about future returns. Constant fluctuations in asset prices create uncertainty regarding expected performance, making the investment process particularly challenging for beginners and professionals. Thus, there is a growing need to support investment decisions with consolidated statistical models and optimization formulations capable of efficiently allocating capital.
+
+The Modern Portfolio Theory (MPT), proposed by Harry Markowitz, presents one of the most well-known approaches to balance risk and return via diversification. Through the mathematical optimization formulation known as Portfolio Selection, it is possible to build portfolios aimed at minimizing risk for a given level of expected return, using concepts such as variance, covariance and asset correlation \citep{markowitz1952}. Diversification using negatively or weakly correlated assets allows for a significant reduction in portfolio volatility, thereby improving the risk--return trade-off \citep{assaf2021}.
+
+Despite its solid theoretical foundation, the classical portfolio theory faces some important limitations in practice. Among them: (a) returns often exhibit outliers, which can distort the estimation of means and covariances; (b) the modeling usually assumes stationarity of statistical properties, i.e., that the future will behave similarly to the past; (c) the relationships between assets are often treated as linear and Gaussian. In real-world markets, these assumptions frequently fail, giving rise to nonlinear dependency structures and time-varying correlations \citep{rubinstein2002, prado2016}.
+
+In this context, Artificial Intelligence (AI) and Machine Learning (ML) offer powerful alternatives to overcome some of the limitations of traditional models. ML techniques are capable of capturing nonlinear relationship and complex patterns without requiring rigid parametric assumptions \citep{bartram2020}.The literature includes applications of deep architecture models such as RNNs and LSTMs, as well as generative models like GANs for scenario generation and risk modeling \citep{fischer2018, xue2023, zhu2020}.
+
+However, deep architectures require large datasets, high computational cost and careful hyperparameter tuning. In many practical contexts---including individual or small academic projects---these constraints may be prohibitive. This motivates the exploration of simpler models such as regularized Linear Regression and Multilayer Perceptrons (MLPs), which are easier to train and interpret, yet still capable of capturing relevant patterns in financial time series.
+
+In this work, we propose a pragmatic approach: instead of designing a fully deep learning-based portfolio allocation system, we focus on using relatively simple ML models to improve one of the most critical inputs of the Markowitz framework: the vector of expected returns. We test whether Linear Regression and an MLP, applied with lag-based features and walk-forward forecasting, can produce more informative expected returns than naive historical means, and whether this translates into better risk-adjusted portfolios.
+
+\section{Theoretical Background}
+\label{sec:theoretical_background}
+
+\subsection{Modern Portfolio Theory}
+
+Harry Markowitz introduced the Modern Portfolio Theory (MPT) in the 1950s and was later awarded the Nobel Prize in Economics in 1990. MPT formalizes the idea that investors should not analyze assets in isolation, but rather as part of a portfolio, considering how each asset interacts with the others. The central trade-off is between expected return and risk, where risk is typically measured by variance or standard deviation of returns \citep{markowitz1952, assaf2021}.
+
+Given a randon vector of asset returns $r = [r_1 \, r_2\, \ldots\, r_N]^T$, the expected return of the portfolio is given by
+\begin{equation}
+    \mu_p = \sum_{i=1}^{N} w_i E[r_i],
+\end{equation}
+where $w_i$ is the weight allocated to asset $i$, $E[r_i]$ is its expected return of the i-th asset and $N$ is the number of assets. The portfolio variance can be written as
+\begin{equation}
+    \sigma_p^2 = \sum_{i=1}^{N} \sum_{j=1}^{N} w_i w_j C_{ij},
+\end{equation}
+where $C_{ij}$ is the covariance between the returns of assets $i$ and $j$.
+
+The covariance $C_{ij}$ itself can be decomposed as
+\begin{equation}
+    C_{ij} = \rho_{ij} \sigma_i \sigma_j,
+\end{equation}
+where $\rho_{ij}$ is the correlation coefficient between assets $i$ and $j$. Negative or low correlations are especially valuable, as they enable risk reduction through diversification \citep{markowitz1952}.
+
+\subsection{Risk Decomposition and Diversification}
+
+Total portfolio risk can be decomposed into systematic and unsystematic components. Systematic risk is associated with market-wide factors and cannot be eliminated through diversification, whereas unsystematic risk is specific to individual assets or sectors and can be substantially reduced by combining assets with low or negative correlations \citep{ross2002}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{charts/MaroneRiskDiversifiedN.jpg}
+    \caption{Total risk of portfolio.}
+    \label{fig:Systematic_and_unsystematic}
+    
+    \vspace{0.2cm}
+    {\small\textit{Source: Author (2025)}}
+\end{figure}
+
+
+In graphical terms, as the number of diversified assets increases, the unsystematic component of the portfolio's variance tends to decrease, converging towards the systematic risk level. This justifies the search for diversified portfolios and the careful analysis of covariance and correlation structures (see Figure~\ref{fig:Systematic_and_unsystematic}).
+
+\subsection{Markowitz Optimization Formulation}
+
+The Markowitz portfolio selection problem can be formalized as follows. Let $E = [E_1\, \dots\, E_N]$ denote the vector of expected returns and $C$ the covariance matrix. The objective is:
+\begin{align}
+    \text{Minimize} \quad & \sigma_p^2 = \sum_{i=1}^{N} \sum_{j=1}^{N} w_i w_j C_{ij} \\
+    \text{subject to} \quad & \sum_{i=1}^{N} w_i E_i \le \gamma, \\
+    & \sum_{i=1}^{N} w_i = 1, \\
+    & w_i \geq 0 \quad \forall i,
+\end{align}
+where $\gamma$ is a target expected return chosen by the investor. The first constraint enforces the desired return, the second ensures that all capital is invested, and the third prohibits short selling \citep{markowitz1952}.
+
+An alternative and widely used formulation to explore the trade-off between return and risk using a parameter $\lambda \in [0,1]$ in a scalarized objective:
+\begin{align}
+    \text{Minimize} \quad & 
+        J(w) = \lambda \sigma_p^2(w) - (1 - \lambda)\mu_p(w) \\
+    \text{subject to} & \sum_{i=1}^{N} w_i = 1, \\
+    & w_i \ge 0 \quad \forall i,
+\end{align}
+where small $\lambda$ emphasizes return and large $\lambda$ emphasizes risk minimization\citep{fabozzi2011}.
+
+\subsection{Efficient Frontier}
+
+The set of optimal portfolios for different target returns $\gamma$ or for different $\lambda$ trace out the efficient frontier. Points on the frontier offer the highest expected return for a given level of risk (or the lowest risk for a given return). Portfolios within the frontier are inefficient because there exists another allocation with either higher return at the same risk or lower risk at the same return \citep{markowitz1952, assaf2021}.
+
+Graphically, the efficient frontier often appears as an concave curve in the risk--return plane. The minimum-variance portfolio occupies the leftmost point of the frontier, while portfolios with higher expected return (and higher risk) lie towards the right (see Figure~\ref{fig:fronteira_asaf}). The portion of the frontier lying below the minimum-variance portfolio is considered suboptimal because it delivers lower return for the same level of risk when compared to any point above it on the frontier.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\textwidth]{charts/GrandeForonteiraVermelhaM.jpg}
+    \caption{Efficient Frontier}
+    \label{fig:fronteira_asaf}
+    \vspace{0.5em}
+    {\small\textit{Source: Author (2025)}}
+\end{figure}
+
+
+
+\subsection{Sharpe Ratio}
+William Sharpe introduced the Sharpe ratio in 1966, a metric that evaluates the excess return per unit of risk \citep{sharpe1966}.
+
+The Sharpe ratio is defined as:
+\begin{equation}
+    \text{Sharpe} = \frac{\mu_p - R_f}{\sigma_p},
+\end{equation}
+where $\mu_p$ is the portfolio's expected return, $\sigma_p$ is the portfolio's volatility (standard deviation of returns), and $R_f$ is the risk-free rate --- the return of an investment with negligible default risk, often represented by government securities. The numerator represents the excess return above the risk-free rate, while the denominator captures the total risk endured by the investor.
+
+Maximizing the Sharpe ratio is equivalent to finding the portfolio that offers the best risk-adjusted return on the Efficient Frontier. The portfolio that maximizes the Sharpe ratio is found by solving the optimization problem:
+\begin{align}
+    \text{Maximize} \quad & \frac{\mu_p(w) - R_f}{\sigma_p(w)} \\
+    \text{subject to} \quad & w \in \text{Efficient Frontier},
+\end{align}
+
+\noindent where the objective function directly maximizes the Sharpe ratio. Geometrically, the maximum Sharpe ratio portfolio lies at the point of the Efficient Frontier where a line traced from the risk-free rate is tangent to the frontier.
+
+In this work, we employ both optimization processes. First, we construct the Efficient Frontier by solving the Markowitz problem across the $\lambda$ interval to identify the risk–return trade-off. Then, we solve the maximum Sharpe ratio optimization to select the portfolio with the best risk-adjusted return on the Efficient Frontier.
+
+\subsection{Neural Networks and Machine Learning in Finance}
+
+Neural networks are computational models inspired by the structure and functioning of the human brain, capable of approximating complex and nonlinear functions from data \citep{goodfellow2016}. In finance, they have been used to model price dynamics, forecast returns and volatilities, and to support trading and risk management decisions \citep{bartram2020}.
+
+Deep architectures such as Recurrent Neural Networks (RNN), Long Short-Term Memory (LSTM) and Bidirectional LSTM (BiLSTM) are particularly effective in capturing temporal dependencies in time series \citep{fischer2018, xue2023}. Generative Adversarial Networks (GANs) have been applied to simulate realistic market scenarios and explore high-dimensional return distributions \citep{zhu2020}.
+
+However, the practical deployment of deep models requires a substantial data volume, computational resources and methodological sophistication. In this article, such architectures are discussed as part of the theoretical background, but the empirical implementation focuses on simpler and more interpretable models: regularized Linear Regression and a Multilayer Perceptron, which can be trained with modest computational effort while still capturing useful patterns.
+
+\section{Data and Experimental Design}
+
+\subsection{Data Source and Asset Universe}
+
+The empirical study uses daily price data from Brazilian equities listed on B3, the Brazilian stock exchange. Data were obtained from the Yahoo Finance platform via the \texttt{yFinance} Python library. The sample covers the period from January 2010 to January 2025, providing approximately 15 years of data that includes different market regimes, including periods of high volatility, economic crises, and various monetary policy environments in Brazil.
+
+\subsection{Automated Asset Selection for Diversification}
+
+To ensure diversification, we employ an automated asset selection procedure that identifies 10 assets with low correlation and stable correlation patterns over time. The selection method evaluates correlation stability year-by-year from 2010 to 2025 using monthly returns, selecting pairs of assets that maintain low and stable correlations.
+
+The method works as follows:
+\begin{enumerate}
+    \item For each year in the sample period, compute the correlation matrix of monthly returns
+    \item For each pair of assets, track the time series of correlations across years
+    \item Calculate statistics for each pair: mean correlation, standard deviation of correlations, and maximum correlation
+    \item Score each pair as: $\text{score} = \text{mean} + \text{std} + \text{max}$, where lower scores indicate more desirable pairs (low and stable correlations)
+    \item Select the top $n$ pairs (where $n = 5$ for 10 assets) ensuring no asset is repeated
+\end{enumerate}
+
+This approach helps mitigate ensures diversification across industries and selects assets that have historically maintained low correlations---a crucial property for portfolio optimization. The selected assets include companies from different sectors such as retail, telecommunications, banking, industrial and technology, providing a diversified universe for portfolio construction (\cite{rubinstein2002, markowitz1952}).
+
+The asset selection procedure described above was performed using the full historical dataset (2010-2025). In a real-world implementation, should be considered an asset selection using only information available up to the decision date. This would further enhance the realism of the backtest and avoid a potential case of look-ahead bias. However, for the purposes of this study, which focuses on evaluating the impact of ML-enhanced expected return estimates, we maintain a fixed asset universe.
+
+\subsection{Return Computation and Scaling}
+
+For the analysis, we compute monthly returns from daily closing prices. Monthly returns are calculated as:
+\begin{equation}
+    r_{t} = \frac{P_t - P_{t-1}}{P_{t-1}},
+\end{equation}
+where $P_t$ denotes the closing price at the end of month $t$. Monthly aggregation reduces noise and computational complexity while maintaining sufficient granularity for portfolio rebalancing decisions (\cite{tsay2010}).
+
+The choice of monthly frequency is motivated by practical considerations: (a) it reduces the impact of microstructure noise present in daily data; (b) it aligns with typical rebalancing frequencies used by institutional investors; (c) it provides a reasonable balance between model complexity and data availability for the walk-forward procedure (\cite{prado2020}).
+
+\subsection{Train--Test Split and Walk-Forward}
+
+The dataset is divided chronologically: the initial 70\% of the sample is used for model training and hyperparameter calibration, and the remaining 30\% is reserved for evaluation and portfolio backtesting. Within this structure, a walk-forward procedure is employed so that, at each prediction step, the model is trained only on past data and evaluated on the next unseen observations. This setup mimics the information constraints of real-time decision making and avoids data leakage \citep{prado2020, krauss2017}.
+
+\section{Predictive Models}
+
+\subsection{Feature Engineering}
+
+For each asset, we construct lag-based features from monthly returns. For a given window size $k=24$ (months), the feature vector at time $t$ is:
+\begin{equation}
+    X_t = \{ r_{t-1}, r_{t-2}, \ldots, r_{t-k} \}.
+\end{equation}
+
+This configuration allows the model to capture short-term momentum ---the tendency of returns to persist it's behavior for brief periods--- mean-reversion--- when high or low returns tend to move toward their historical average--- and other local patterns over a two-year horizon (\cite{tsay2010}). The choice of 24 lags provides sufficient historical context while avoiding excessive dimensionality that could lead to overfitting. Importantly, all features are computed using only past information, as the model predict the rrturn at time $t$ useing only past information up to $t-1$, ensuring no data leakage in the walk-forward procedure.
+
+\subsection{Linear Regression with Regularization}
+
+The first predictive model is a Ridge Regression, which extends standard Linear Regression by adding $L_2$ regularization to prevent overfitting. For each asset, a model of the form
+
+\begin{equation}
+    \hat{r}_{t+1} = \beta_0 + \sum_{j=1}^{k} \beta_j r_{t-j+1} + \epsilon_{t+1}
+\end{equation}
+
+\noindent is fitted on the training portion of the data, where the coefficients $\beta_j$ are estimated by minimizing a penalized least squares objective:
+
+\begin{equation}
+    \min_{\beta} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2 + \alpha \sum_{j=1}^{k} \beta_j^2,
+\end{equation}
+
+\noindent where $\alpha = 1.0$ is the regularization parameter that controls the trade-off between fitting the data and keeping coefficients small. The $L_2$ penalty ($\sum \beta_j^2$) shrinks coefficients towards zero, reducing model complexity and improving generalization, particularly important when dealing with financial time series that may exhibit multicollinearity among lagged features.
+
+The model is trained separately for each asset, allowing it to capture asset-specific patterns. Ridge Regression provides a simple baseline that is interpretable and computationally efficient, making it suitable for comparison with more complex models(\cite{zhang2003}).
+
+\subsection{Multilayer Perceptron (MLP)}
+
+The second predictive model is a Multilayer Perceptron (MLP), implemented using \texttt{sklearn.neural\_network.MLPRegressor}. The architecture consists of two hidden layers with 50 neurons each, using ReLU activation functions. The MLP receives the same lag-based features as input and outputs a forecast for the next-period ($t$) return.
+
+Key hyperparameters:
+\begin{itemize}[noitemsep]
+    \item Architecture: 2 hidden layers, 50 neurons each
+    \item Activation: ReLU
+    \item Optimizer: Adam with learning rate $10^{-3}$
+    \item Maximum iterations: 1000
+    \item Random state: 42 (for reproducibility)
+\end{itemize}
+
+This relatively small architecture balances expressiveness and computational efficiency, allowing the model to capture nonlinear relationships while remaining trainable with the available data (\cite{krauss2017, fischer2018}).
+
+\subsection{Walk-Forward Forecasting and Blending}
+
+To ensure realistic evaluation, both models are used in a walk-forward scheme. At each time step within the test period:
+\begin{enumerate}
+    \item all data up to $t-1$ are used to fit or update the model;
+    \item the model predicts the return for time $t$;
+    \item the forecast is stored as part of a predicted return series for the next predition step.
+\end{enumerate}
+
+After obtaining the full series of forecasts through walk-forward prediction, expected returns for each asset are derived as the average of predicted returns over the test period. However, raw model predictions may be noisy or extreme (\cite{dietterich2000}). To mitigate this, we employ a blending mechanism that combines the model-based expected return with the historical mean from the training period:
+\begin{equation}
+    \mu_i^{blend} = \alpha \hat{\mu}_i^{ML} + (1 - \alpha)\mu_i^{hist},
+\end{equation}
+where $\hat{\mu}_i^{ML}$ is the mean predicted return for asset $i$ over the test period, $\mu_i^{hist}$ is the historical mean from the training period, and $\alpha = 0.3$ controls the contribution of the ML model. This blending parameter was chosen to balance between model predictions and historical stability, shrinking extreme predictions towards the historical baseline. This reflects the idea that forecasts should complement, rather than entirely replace, historical information, especially in the presence of model uncertainty. The choice of $\alpha=0.3$ represents a conservative balance: lower values would shrink predictions more toward historical means, potentially reducing the impact of the ML models, while higher values would amplify both benefits and risks of model predictions. Future work should explore the sensitivity of portfolio performance to different blending parameter values to identify optimal strategies.
+
+\section{Portfolio Optimization Pipeline}
+
+\subsection{Baselines: Historical Markowitz Portfolios}
+
+As a baseline, we build Markowitz portfolios using only historical means and covariances estimated from the training data. From these estimates, we compute the efficient frontier and select portfolios according to criteria such as:
+\begin{itemize}[noitemsep]
+    \item minimum-variance portfolio;
+    \item maximum Sharpe ratio portfolio, given a risk-free rate \citep{sharpe1966};
+    \item portfolios with intermediate risk levels.
+\end{itemize}
+
+These portfolios reflect the traditional approach in which no predictive model is used beyond the historical statistics.
+
+\subsection{Markowitz with ML-Based Expected Returns}
+
+Next, we construct analogous portfolios using the blended expected returns obtained from the Linear Regression and from the MLP models:
+\begin{itemize}[noitemsep]
+    \item Markowitz + LR-blended expected returns;
+    \item Markowitz + MLP-blended expected returns.
+\end{itemize}
+
+In both cases, the covariance matrix remains computed from historical returns (e.g., using the training window or a rolling scheme). In this way, we isolate the effect of changing the expected return vector while keeping the risk structure consistent.
+
+\subsection{Backtesting and Time Series Comparison}
+
+To evaluate the portfolio strategies, we simulate a backtest over the test period (\cite{prado2020}). Expected returns are computed for the training data using the predictive movels, while the covariance matrix is estimated directly from the historical returns in the same training window. The Markowitz optimization is them solved once, generating a single vector of portfolio wheights that remains fixed for the entire test period.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.85\textwidth]{charts/portfolio_timeseries_comparison.png}
+\caption{Portfolio Cumulative Returns Over Time (Out-of-Sample)}
+\label{fig:timeseries}
+\end{figure*}
+
+The resulting portfolio equity curves (Figure~\ref{fig:timeseries}) are then compared across strategies. We also inspect allocation patterns, concentration, and stability of weights over time.
+
+\subsection{Performance Metrics}
+
+The following metrics are used:
+\begin{itemize}[noitemsep]
+    \item \textbf{Annualized return} and \textbf{annualized volatility};
+    \item \textbf{Sharpe ratio} \citep{sharpe1966};
+    \item \textbf{Efficient frontier comparison}, by plotting risk--return pairs for portfolios generated by each method.
+\end{itemize}
+
+These indicators help determine whether ML-enhanced expected returns lead to tangible improvements in portfolio behavior.
+
+\section{Results and Discussion}
+
+\subsection{Expected Return Predictions}
+
+The three approaches produce distinct expected return estimates ($\mu$) for each asset. The historical approach uses simple averages of the past returns from the training period, while Linear Regression and MLP generate forecasts based on learned patterns from lag features, i.e., $\mu_i = E[r_t \mid \text{lags}]$. 
+
+Table~\ref{tab:mu_comparison} presents the expected returns predicted by each model for all selected assets. Analysis reveals that:
+
+\begin{itemize}[noitemsep]
+    \item The MLP model produces the most varied predictions across assets, with higher expected returns for most assets compared to historical means, suggesting it captures nonlinear relationships that favor certain assets
+    \item Linear Regression predictions are generally more conservative, staying closer to historical means, with some assets showing lower expected returns than the historical baseline
+    \item The blending mechanism ($\alpha=0.3$) successfully prevents extreme predictions while preserving model signals, as evidenced by the moderate differences between model predictions and historical means
+    \item PINE4.SA consistently shows high expected return across all models, which, combined with its relatively low volatility, explains its dominant weight in optimized portfolios
+\end{itemize}
+
+\begin{table*}[t]
+\centering
+\caption{Expected Returns ($\mu$) from each Model for each Asset}
+\label{tab:mu_comparison}
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Ticker & Classic Markowitz & Linear Regression & MLP \\
+\midrule
+PETR3.SA & 0.0261 & 0.0237 & 0.0326 \\
+WEGE3.SA & 0.0030 & 0.0026 & -0.0014 \\
+TOTS3.SA & 0.0125 & 0.0146 & 0.0096 \\
+VALE3.SA & 0.0112 & 0.0126 & 0.0174 \\
+EMBR3.SA & -0.0023 & -0.0040 & 0.0016 \\
+VIVT3.SA & 0.0243 & 0.0226 & 0.0283 \\
+CSNA3.SA & 0.0153 & 0.0179 & 0.0238 \\
+RADL3.SA & 0.0155 & 0.0163 & 0.0172 \\
+PCAR3.SA & 0.0081 & 0.0079 & 0.0147 \\
+PINE4.SA & 0.0299 & 0.0332 & 0.0422 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Predictive Model Evaluation}
+\label{sec:model_evaluation}
+
+While the previous section examined the expected return estimates ($\mu$) produced by each model, it is crucial to evaluate the quality of these predictions. To assess the predictive performance of the Linear Regression and MLP models, we evaluate their ability to forecast individual monthly returns using walk-forward prediction on the test period. For each asset, we compute three standard metrics: Mean Squared Error (MSE), coefficient of determination ($R_2$), and correlation between predicted and realized returns.
+
+The Mean Squared Error (MSE) measures the average squared difference between predicted and actual returns, defined as:
+\begin{equation}
+    \text{MSE} = \frac{1}{n} \sum_{i=1}^{n} (r_i - \hat{r}_i)^2,
+\end{equation}
+where $r_i$ is the actual return at time $i$, $\hat{r}_i$ is the predicted return and $n$ is the number of observations. Lower MSE values suggests better prediction accuracy, as they represent smaller prediction errors.
+
+The correlation coefficient measures the linear relationship between predicted and realized returns:
+\begin{equation}
+    \text{Correlation} = \frac{\sum_{i=1}^{n} (r_i - \bar{r})(\hat{r}_i - \bar{\hat{r}})}{\sqrt{\sum_{i=1}^{n} (r_i - \bar{r})^2 \sum_{i=1}^{n} (\hat{r}_i - \bar{\hat{r}})^2}},
+\end{equation}
+where $\bar{r}$ and $\bar{\hat{r}}$ are the sample means of actual and predicted returns, respectively. Correlation value ranges from 1 to -1, where values closer to 1 indicates strong positive linear relationships between predictions and actual returns.
+
+The evaluation apply the same walk-forward procedure used for generating expected returns: at each time step, the model is trained only on past data and predicts the next-period return storing current prediction for the next prediction step. This ensures a realistic assessment that mirrors the information constraints of real-world forecasting. The metrics are computed by comparing the sequence of predicted returns against the actual realized returns over the test period.
+
+Table~\ref{tab:model_evaluation_summary} presents the average performance metrics across all assets for both models. The results reveal that Ridge Regression outperforms MLP in both MSE (0.0307 vs 0.0326, approximately 6\% lower) and $R_2$ (-0.601 vs -1.006). Furthermore, Ridge performs better in 8 out of 10 assets in terms of MSE during the backtest, suggesting a more consistent behaviour across the asset set. However, these results should be interpreted with caution, as they are based on a single historical backtest. Methods such as Monte Carlo simulations would be needed to confirm their robustness under different market conditions and assess the statistical significance of these findings.
+
+%The negative $R^2$ values deserve particular attention. The $R^2$ metric compares the model's prediction errors to the variance of the target variable. When $R^2$ < 0, the sum of squared residuals exceeds the total variance, indicating that the model's predictions are less informative than the simple historical mean. This finding aligns with the efficient market hypothesis and the difficulty of forecasting financial returns \citep{fama1970}. \\
+
+\begin{table*}[t]
+\centering
+\caption{Predictive Model Performance Summary (Average Across All Assets)}
+\label{tab:model_evaluation_summary}
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Model & MSE & $R_2$ & Correlation \\
+\midrule
+Linear Regression & 0.0307 & -0.601 & 0.020 \\
+MLP & 0.0326 & -1.006 & 0.053 \\
+\bottomrule
+\end{tabular}
+\vspace{0.2cm}
+\footnotesize
+\textit{Note: MSE = Mean Squared Error. $R_2$ < 0 indicates the model performs worse than predicting the historical mean.}
+\end{table*}
+
+%\textbf{Asset-Specific Performance:}
+
+% Table~\ref{tab:model_evaluation_detailed} presents detailed metrics for each asset and model. Several patterns emerge:
+
+% \begin{itemize}[noitemsep]
+%     \item \textbf{High variation across assets}: MSE ranges from 0.0043 (VIVT3.SA with Ridge) to 0.1250 (PCAR3.SA with Ridge), a 29-fold difference. This suggests that some assets are inherently more predictable than others, likely due to differences in volatility and market microstructure
+%     \item \textbf{Best-performing asset}: VIVT3.SA achieves the lowest MSE (0.0043) with Ridge Regression, along with the least negative $R^2$ (-0.22) and highest correlation (0.24) among Ridge predictions. This asset's relatively low volatility and stable return patterns make it more receptive to linear modeling
+%     \item \textbf{Most challenging asset}: PCAR3.SA exhibits the highest MSE (0.1250) and negative correlation (-0.08) with Ridge, indicating extreme difficulty in prediction, likely due to high volatility and irregular return patterns
+%     \item \textbf{Correlation patterns}: Most correlations are positive but very low (0.02 to 0.29), with some negative correlations (e.g., PINE4.SA Ridge = -0.19) suggesting the model predicts in the opposite direction of actual returns. The highest correlation is CSNA3.SA with MLP (0.286), still indicating weak predictive power
+%     \item \textbf{MLP advantage cases}: MLP outperforms Ridge in only 2 assets (PCAR3.SA and PINE4.SA) in terms of MSE, and in these cases, the improvement is modest. This suggests that nonlinear patterns, if they exist, are either not strong enough to justify the added complexity or are being obscured by noise
+% \end{itemize}
+
+% \begin{table*}[t]
+% \centering
+% \caption{Detailed Predictive Model Performance by Asset}
+% \label{tab:model_evaluation_detailed}
+% \tiny
+% \begin{tabular}{lcccccc}
+% \toprule
+% \multirow{2}{*}{Ticker} & \multicolumn{3}{c}{Ridge Regression} & \multicolumn{3}{c}{MLP} \\
+% \cmidrule(lr){2-4} \cmidrule(lr){5-7}
+%  & MSE & $R^2$ & Correlation & MSE & $R^2$ & Correlation \\
+% \midrule
+% CSNA3.SA & 0.0315 & -0.499 & 0.192 & 0.0340 & -0.618 & 0.286 \\
+% EMBR3.SA & 0.0289 & -0.590 & -0.068 & 0.0307 & -0.691 & 0.063 \\
+% PCAR3.SA & 0.1250 & -0.078 & -0.076 & 0.1200 & -0.034 & 0.039 \\
+% PETR3.SA & 0.0230 & -1.869 & -0.169 & 0.0259 & -2.225 & -0.094 \\
+% PINE4.SA & 0.0501 & -0.627 & -0.193 & 0.0454 & -0.476 & 0.049 \\
+% RADL3.SA & 0.0080 & -0.605 & 0.046 & 0.0101 & -1.028 & 0.132 \\
+% TOTS3.SA & 0.0121 & -0.323 & 0.142 & 0.0169 & -0.848 & 0.152 \\
+% VALE3.SA & 0.0114 & -0.624 & 0.085 & 0.0153 & -1.172 & -0.013 \\
+% VIVT3.SA & 0.0043 & -0.219 & 0.235 & 0.0089 & -1.503 & -0.061 \\
+% WEGE3.SA & 0.0122 & -0.578 & 0.009 & 0.0191 & -1.462 & -0.018 \\
+% \bottomrule
+% \end{tabular}
+% \vspace{0.2cm}
+% \footnotesize
+% \textit{Note: MSE = Mean Squared Error. Lower MSE is better. $R^2$ < 0 indicates worse than mean prediction. Higher correlation is better.}
+% \end{table*}
+
+% \textbf{Implications for Portfolio Optimization:}
+
+% The poor predictive performance at the individual return level raises an important question: why do these models still contribute to improved portfolio performance (as shown in Section~\ref{sec:portfolio_performance})? Several factors explain this apparent paradox:
+
+% \begin{enumerate}
+%     \item \textbf{Mean vs. point-wise prediction}: Portfolio optimization relies on expected returns ($\mu$), which are averages of predicted returns over the test period. Even if individual predictions are inaccurate, the average may still provide useful information about relative asset attractiveness. The evaluation metrics (MSE, $R^2$) measure point-wise accuracy, which is more stringent than mean accuracy.
+    
+%     \item \textbf{Relative vs. absolute predictions}: For portfolio optimization, what matters is not the absolute accuracy of each asset's expected return, but rather the \textit{relative} ordering and differences between assets. A model that correctly identifies which assets are relatively more attractive (even with poor absolute predictions) can still generate effective portfolios.
+    
+%     \item \textbf{Diversification effects}: Errors in individual asset predictions may cancel out in a diversified portfolio. The Markowitz framework uses the covariance matrix, which captures risk relationships that can compensate for errors in expected return estimates.
+    
+%     \item \textbf{Model comparison}: The key finding is not that the models are highly accurate in absolute terms, but that Ridge Regression's predictions, while poor, are \textit{less poor} than MLP's predictions. This relative advantage, combined with the blending mechanism that shrinks predictions toward historical means, may be sufficient to improve portfolio outcomes.
+% \end{enumerate}
+
+These findings highlight a key insight: \textit{poor point-wise prediction accuracy does not necessarily prevent an useful portfolio optimization}. Negative $R_2$ values indicate a consistent result with the efficient market hypothesis and the inherent difficulty of predicting asset-level returns \citep{fama1970, prado2020}. However, as emphasized by \citet{prado2020}, the practical value of forecasts for portfolio construction lies not in their absolute accuracy but in their \textit{relative} information content—specifically, their ability to rank assets by expected attractiveness. Even when magnitude predictions are inaccurate, a model that identifies which assets are relatively more favorable can improve portfolio outcomes. This phenomenon, observed in several empirical studies, helps explain why Ridge Regression, despite weak point-wise performance, still contributes to superior risk–return characteristics in the optimized portfolio.
+
+\subsection{Portfolio Optimization and Performance}
+
+Portfolios are optimized using the Markowitz framework with three different expected return vectors: (i) historical means, (ii) Linear Regression blended forecasts, and (iii) MLP blended forecasts. In all cases, the covariance matrix is estimated from historical returns in the training period, ensuring that differences in portfolio performance stem primarily from differences in expected return estimates.
+
+The optimization is implemented using maximum Sharpe ratio optimization. This approach ensures that differences in expected return estimates ($\mu$) are reflected in portfolio weights, providing a fair comparison between models. The risk-free rate used is 15\% annually (approximating the Brazilian Selic rate in 2025), converted to monthly as $r_f^{monthly} = (1.15)^{1/12} - 1 \approx 1.17\%$ per month.
+
+%\subsection{Methodological Considerations and Limitations}
+
+%During the implementation and evaluation process, several important methodological considerations emerged that are crucial for obtaining meaningful and interpretable results:
+
+% \textbf{Portfolio Concentration:} Initial experiments revealed that unconstrained optimization could lead to extreme portfolio concentration (e.g., 100\% allocation to a single asset with lowest volatility). This occurs when the optimization prioritizes minimum variance ($\lambda \to 1$) without considering diversification benefits. To address this, future implementations should consider choosing one of the following approaches:
+% \begin{itemize}[noitemsep]
+%     \item Maximum weight constraints per asset (e.g., 30\%)
+%     \item Using maximum Sharpe ratio optimization instead of fixed $\lambda$
+%     \item Ensuring $\lambda$ is chosen to balance risk and return, not just minimize variance
+% \end{itemize}
+
+% \textbf{Comparison Methodology:} For a fair comparison between models, it is crucial to use the same optimization criterion (e.g., maximum Sharpe or fixed $\lambda$) across all three approaches. Using different $\lambda$ values or target risk levels can lead to misleading comparisons where differences in performance reflect optimization choices rather than the quality of expected return estimates.
+
+\subsection{Data and Implementation Details:}
+\begin{itemize}[noitemsep]
+    \item Training period: 70\% of data (approximately 10.5 years)
+    \item Test period: 30\% of data (approximately 4.5 years)
+    \item Window size: 24 months for lag features
+    \item Blending parameter: $\alpha = 0.3$
+    \item Risk-free rate: 15\% annually (Brazilian Selic rate in 2025), converted to monthly
+    \item Return frequency: Monthly (12 periods per year)
+    \item Optimization criterion: Maximum Sharpe ratio
+\end{itemize}
+
+The test period of approximately 4.5 years may not capture complete market cycles, which typically span 7-10 years or longer and portfolio performance can vary significantly across different market regimes (bull markets, bear markets, high volatility periods, etc.). To enhance robustness, future research should test the methodology across multiple temporal windows to assess whether the observed improvements persist across different market conditions and economic cycles.
+
+\subsection{Performance Metrics}
+
+The evaluation focuses on risk-adjusted performance metrics computed over the test period:
+\begin{itemize}[noitemsep]
+    \item \textbf{Annualized Sharpe Ratio}: Measures excess return per unit of risk
+    \item \textbf{Annualized Return}: Mean return annualized to 12 months
+    \item \textbf{Annualized Volatility}: Standard deviation of returns annualized
+    \item \textbf{Cumulative Return}: Total wealth multiplier over the test period
+\end{itemize}
+
+These metrics are computed from realized portfolio returns in the backtest, ensuring that performance reflects actual out-of-sample behavior rather than in-sample optimization.
+
+\subsection{Theoretical vs. Realized Performance}
+
+
+A crucial methodological consideration is the distinction between theoretical and realized performance. The efficient frontier plots (figure~\ref{fig:frontier_comparison}) show \textbf{theoretical} frontiers based on expected returns ($\mu$) and covariance matrices estimated by each model. These frontiers represent what each model "believes" will happen based on its predictions.
+
+
+
+However, the actual performance metrics are computed using \textbf{realized returns} from the out-of-sample test period. This distinction is important because:
+
+\begin{itemize}[noitemsep]
+    \item Models that predict higher expected returns (e.g., MLP) will show superior theoretical frontiers, even if those predictions are overly optimistic
+    \item The divergence between theoretical frontiers and realized performance is itself an important finding about prediction quality
+    \item A model with a "better" theoretical frontier may underperform in practice if its predictions do not materialize
+\end{itemize}
+
+This phenomenon is particularly relevant for machine learning models, which may exhibit overfitting or excessive optimism in their predictions. The comparison between theoretical frontiers and realized metrics provides valuable insights into the practical value of ML-enhanced expected return estimates.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.48\textwidth]{charts/efficient_frontier_comparison_sharpe_star.png}
+\caption{Efficient Frontier Comparison (Theoretical)}
+\label{fig:frontier_comparison}
+\end{figure}
+
+\subsection{Key Findings and Interpretation}
+\label{sec:portfolio_performance}
+
+\begin{table*}[t]
+\centering
+\caption{Portfolio Performance Metrics (Test Period)}
+\label{tab:portfolio_metrics}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Model & Sharpe & Ann. Return & Ann. Volatility & Cum. Return \\
+\midrule
+Classic Markowitz & 0.5432 & 33.16\% & 27.48\% & 4.41x \\
+Markowitz + Linear Regression & 0.5911 & 35.73\% & 28.56\% & 4.86x \\
+Markowitz + MLP & 0.5718 & 34.33\% & 27.66\% & 4.63x \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+Table~\ref{tab:portfolio_metrics} presents the performance metrics for the three portfolio strategies over the test period. The results demonstrate several important findings:
+
+%\textbf{Performance Comparison:}
+\begin{itemize}[noitemsep]
+    \item \textbf{Markowitz + Linear Regression} achieves the highest Sharpe ratio (0.5911) and highest annualized return (35.73\%), with annualized volatility of 28.56\% and cumulative return of 4.86x over the test period
+    \item \textbf{Markowitz + MLP} achieves a Sharpe ratio of 0.5718 (second best), with  annualized return of 34.33\% and volatility of 27.66\%, resulting in a cumulative return of 4.63x
+    \item \textbf{Classic  Markowitz }  shows the lowest Sharpe ratio (0.5432), with annualized return of 33.16\%, volatility of 27.48\%, and cumulative return of 4.41x
+\end{itemize}
+
+An interesting pattern emerges in portfolio allocation across all three approaches (figure~\ref{tab:weights}): they converge to highly concentrated portfolios, with PINE4.SA receiving the majority of allocation (approximately 63-73\% depending on the model), followed by VIVT3.SA (approximately 19-31\%). This concentration reflects PINE4.SA's combination of high expected return relative to its volatility, relatively low correlation with other assets and a stable return profile that makes it attractive for risk-adjusted optimization. As a financial services company, PINE4.SA may have benefited from specific sector dynamics during the test period, including interest rate environments and credit market conditions. This high concentration could stem from several factors: (a) a limitation of the selected asset universe, where PINE4.SA genuinely offers the best risk-adjusted characteristics; (b) potential overfitting to the training period, where the asset's past performance may not persist; or (c) the unconstrained nature of the optimization, which allows the algorithm to allocate heavily to the single asset that maximizes the Sharpe ratio. 
+
+While the high concentration can be optimal from a theoretical risk-return perspective, it also increases unsystematic risk and reduces the diversification benefits that the Modern Portfolio Theory relies on. This suggests that practical implementations should consider imposing concentration constraints (maximum weight per asset) to enforce diversification, as discussed in the future work section.
+
+\begin{table*}[t]
+\centering
+\caption{Optimal Portfolio Weights by Model (Maximum Sharpe Ratio)}
+\label{tab:weights}
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Ticker & Classic Markowitz & Markowitz + Linear Regression & Markowitz + MLP \\
+\midrule
+PETR3.SA & 0.0506 & 0.0032 & 0.0382 \\
+WEGE3.SA & 0.0000 & 0.0000 & 0.0000 \\
+TOTS3.SA & 0.0000 & 0.0050 & 0.0000 \\
+VALE3.SA & 0.0000 & 0.0000 & 0.0000 \\
+EMBR3.SA & 0.0000 & 0.0000 & 0.0000 \\
+VIVT3.SA & 0.3143 & 0.1936 & 0.2038 \\
+CSNA3.SA & 0.0000 & 0.0000 & 0.0000 \\
+RADL3.SA & 0.0000 & 0.0641 & 0.0000 \\
+PCAR3.SA & 0.0000 & 0.0000 & 0.0675 \\
+PINE4.SA & 0.6351 & 0.7341 & 0.6905 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+The use of maximum Sharpe ratio optimization ensures that differences in expected return estimates are reflected in portfolio weights, providing a fair comparison across models. The walk-forward methodology ensures a realistic evaluation without data leakage, while the blending mechanism ($\alpha=0.3$) prevents extreme predictions while preserving model signals. The superior performance of Ridge Regression over MLP despite its worse point-wise accuracy can be explained by the difference between prediction stability and raw predictive power. While MLP may capture more complex patterns, it also produces more volatile predictions that can lead to overfitting or extreme expected return estimates. Ridge Regression, with its $L_2$ regularization, produces more stable and conservative predictions that are less prone to overfitting. This stability, combined with the blending mechanism that shrinks predictions toward historical means, creates a better balance between model predictions and historical stability, resulting in more reliable expected return estimates for portfolio optimization. Together, these choices create a robust framework for assessing the practical value of ML-enhanced expected returns in portfolio optimization.
+
+\section{Conclusion and Future Work}
+
+This study examined whether simple machine learning models-Linear Regression and MLP-can improve the expected return estimates used in Markowitz portfolio optimization. Although the models showed weak point-wise predictive accuracy, portfolios based on the learned expected returns performed better than the classical historical-mean baseline, with Linear Regression delivering the strongest risk-adjusted results. These findings suggest that even simple models can improve the portfolio construction, but they also reveal limitations: the analysis relied solely on lag-based features, assumed a constant risk-free rate, did not include transaction costs or alternative market regimes and was tested on a single 4.5-year period that may not capture full market cycles.
+
+Future work could address these points by testing concentration constraints, evaluating robustness across different market regimes and incorporating richer information sets—such as technical indicators and macroeconomic variables. Exploring more advanced architectures, comparing with alternative optimization frameworks such as risk parity or Black-Litterman and adding practical considerations like transaction costs would also help clarify when machine learning meaningfully improves portfolio optimization. Overall, the results indicate that machine learning can enhance portfolio optimization by improving expected return estimates, but more evidence is needed to determine when improvements hold consistently.
+
+\printbibliography
+
+\end{document}
