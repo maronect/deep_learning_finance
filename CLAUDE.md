@@ -1,73 +1,111 @@
 # CLAUDE.md
 
-## Roadmap
-Full plan is in ROADMAP.md. Current stage: Etapa 1 — reorganização e 
-refatoração da estrutura do projeto. See ROADMAP.md for details on 
-upcoming stages.
-
 ## Language
 - Conversations can be in Portuguese
 - All code, comments, docstrings, and git commits must be in English
 - You may respond to me in Portuguese
+- Do not use any emoji
+
+---
 
 ## Project Overview
-Quantitative research project comparing three portfolio optimization strategies for Brazilian stocks (B3, 2010–2025): Classic Markowitz, Markowitz + Ridge Regression, and Markowitz + MLP. All approaches are based on Modern Portfolio Theory and evaluated by Sharpe Ratio. Ridge Regression achieved the best result (Sharpe 0.591 vs 0.543 classic).
 
-## Architecture
+Quantitative research project evolving into a full ML Engineering application.
+Domain: portfolio optimization for Brazilian stocks (B3, 2010–2025) using Modern Portfolio Theory.
+Three strategies compared: Classic Markowitz, Markowitz + Ridge Regression, Markowitz + MLP.
+Best result: Ridge Regression — Sharpe 0.591 vs 0.543 classic.
 
-| Path | Role |
-|------|------|
-| `src/data/loader.py` | Download prices via yfinance, compute returns at multiple frequencies |
-| `src/data/asset_selection.py` | Select uncorrelated assets from 35+ Brazilian stocks (4 strategies) |
-| `src/models/lr.py` | Ridge Regression and MLP return predictions (scikit-learn) |
-| `src/models/rnn.py` | LSTM/RNN model in PyTorch — implemented but not yet integrated |
-| `src/optimization/markowitz.py` | Markowitz formulation: return, volatility, solver |
-| `src/optimization/sharpe.py` | Maximize Sharpe Ratio via SLSQP |
-| `src/optimization/evaluation.py` | Portfolio metrics: Sharpe, annualized return, volatility, cumulative return |
-| `src/utils/visualization.py` | 5 comparative charts (matplotlib/seaborn) |
-| `src/utils/export.py` | Export metrics, weights, predictions to CSV |
-| `notebooks/00-compare_models.ipynb` | Main pipeline — runs the full comparison |
-| `outputs/` | Generated charts (PNG), metrics and weights (CSV) |
+Full evolution plan: see **ROADMAP.md** (10 stages from research to deployed API).
+Technical architecture reference: see **ARCHITECTURE.md**.
 
-## ML Model
+---
 
-**Inputs:** Monthly return time series for each asset; lag features created from past 24 months (t-1 … t-24).
+## Current Stage: Stage 1 — Refactoring (in progress)
 
-**Output:** Predicted mean return (μ) per asset for the next period.
+**Completed in Stage 1:**
+- New directory structure created (`config/`, `src/ingestion/`, `src/features/`, `src/pipeline/`, `src/api/`, `artifacts/`, `tests/`)
+- YAML-based config system: `config/pipeline.yaml`, `models.yaml`, `optimization.yaml`, `api.yaml`
+- `src/utils/config_loader.py` — implemented, all modules must use this to read config
+- `src/ingestion/` — **fully implemented**: `downloader.py`, `validators.py`, `__init__.py` (with `DataLayerResult` + `run_data_ingestion()`)
+- `src/features/returns.py` — **fully implemented**: `compute_returns`, `ajustar_risk_free`, `converter_periodo`
+- `src/features/asset_selection.py` — **fully implemented**: all 4 strategies + `select_assets()` + `select_assets_from_config()`
+- `tests/smoke_test_data_layer.py` — 22 assert-based smoke tests for the data layer
+- CI workflow (`.github/workflows/ci.yml`), `docker-compose.yml`, `pyproject.toml`
 
-**Algorithms:**
-- `Ridge` — L2-regularized linear regression (default α=1.0)
-- `LinearRegression` — unregularized baseline
-- `MLPRegressor` — 2 hidden layers × 50 neurons, relu activation
+**Still stub (docstring only — not yet implemented):**
+- `src/features/lag_features.py`
+- `src/models/base.py`, `ridge.py`, `mlp.py`, `blending.py`
+- `src/pipeline/runner.py`, `stages.py`, `context.py`
+- `src/api/main.py`, all routers, all schemas
+- `tests/unit/` and `tests/integration/` test files
 
-**Training:** Walk-forward validation (70% train / 30% test). No data leakage — each prediction uses only past observations.
+**Legacy files (preserved for notebook compatibility — do not modify or delete):**
+- `src/data/loader.py` — original loader, still used by notebooks
+- `src/data/asset_selection.py` — original selection, still used by notebooks
+- `src/models/lr.py` — original Ridge + MLP implementation
+- `src/models/rnn.py` — original LSTM/RNN (PyTorch)
+- `notebooks/` — all notebooks
 
-**Blending:** `final_μ = 0.3 × model_prediction + 0.7 × historical_mean` to prevent extreme predictions.
+---
 
-## How to Run Locally
+## Key Conventions
+
+### Config
+- **No hardcoded parameters** anywhere in `src/`. All values (dates, tickers, frequencies, hyperparameters) come from `config/*.yaml`.
+- Always load config via `src.utils.config_loader.get_config("pipeline")` — never open YAML files directly.
+- `config/pipeline.yaml` is the single source of truth for pipeline parameters.
+
+### Code style
+- **Type hints** on all function signatures.
+- **Google-style docstrings** on all public functions.
+- **No short selling:** portfolio weights constrained to [0, 1], sum to 1.
+- **Walk-forward only:** never use future data when training or predicting.
+- **Model blending alpha:** default 0.3 — keep conservative to prevent ML overfitting.
+
+### Imports
+- New code imports from `src.ingestion`, `src.features`, `src.models`, `src.optimization`, `src.pipeline`, `src.api`, `src.utils`.
+- Do not import from `src.data.*` in new modules — that package is legacy.
+
+### Asset selection
+- Prefer `method="stable_corr_pairs"` for long-term portfolios (set in `config/pipeline.yaml`).
+- The correct function call is `select_assets(method="stable_corr_pairs")` — note: old code used `"stable_pairs"` (wrong name, now fixed).
+- Always pass pre-downloaded `prices=` to `select_assets()` when prices are already in memory — avoids a redundant network call.
+
+### Artifacts
+- All pipeline outputs go to `artifacts/` subdirectories.
+- Persist via `src/utils/export.py` — no ad-hoc CSV writes.
+- `artifacts/runs/` stores execution metadata (timestamp, config snapshot, status).
+
+### Optimization
+- Solver: SLSQP via `scipy.optimize.minimize` — keep constraints explicit (bounds + equality).
+- Risk-free rate: 15% p.a. (SELIC 2025); convert with `ajustar_risk_free(0.15, freq=...)`.
+
+### Tests
+- Smoke tests: plain `assert`-based, no pytest, runnable with `python tests/smoke_test_data_layer.py`.
+- Unit tests: go in `tests/unit/`, use pytest.
+- Integration tests: go in `tests/integration/`, may require network or full pipeline.
+- Never mock the data download in integration tests — use real network calls or pre-saved fixtures.
+
+---
+
+## How to Run
 
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
-# Run main pipeline
+# Run smoke tests (no network needed)
+python tests/smoke_test_data_layer.py
+
+# Run unit tests
+pytest tests/unit/ -v
+
+# Run legacy notebook pipeline
 jupyter notebook notebooks/00-compare_models.ipynb
 ```
 
-Or with Docker:
+Docker:
 ```bash
+docker compose up        # starts API on :8000
 docker build -t dl-finance .
-docker run -p 8888:8888 dl-finance
 ```
-
-Results are saved to `outputs/charts/` and `outputs/models/`.
-
-## Key Conventions
-
-- **No short selling:** portfolio weights constrained to [0, 1], sum to 1.
-- **Risk-free rate:** 15% p.a. (SELIC 2025); use `ajustar_risk_free()` to convert to other frequencies.
-- **Walk-forward only:** never use future data when training or predicting — use `evaluate_models_monthly()`.
-- **Model blending alpha:** default 0.3; keep it conservative to avoid overfitting to ML predictions.
-- **Asset selection:** prefer `select_assets(method="stable_pairs")` for long-term portfolios.
-- **Optimization solver:** SLSQP via `scipy.optimize.minimize` — keep constraints explicit (bounds + eq constraint).
-- **Outputs:** always save metrics and weights via `src/utils/export.py` functions, not ad-hoc CSV writes.

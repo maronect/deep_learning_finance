@@ -18,9 +18,7 @@ from typing import List, Tuple, Dict
 from src.data.loader import load_prices, compute_returns
 
 
-# ============================================================
 # 1. Universo grande de ações brasileiras (mantido)
-# ============================================================
 
 def get_brazilian_stocks_universe() -> List[str]:
     energy = ["PETR4.SA","PETR3.SA","ELET3.SA","ELET6.SA","EQTL3.SA","CSAN3.SA","UGPA3.SA"]
@@ -40,9 +38,7 @@ def get_brazilian_stocks_universe() -> List[str]:
     return list(dict.fromkeys(all_stocks))
 
 
-# ============================================================
 # 2. Seleção clássica: menor soma de correlações absolutas
-# ============================================================
 
 def _select_by_sum_abs_correlation(returns: pd.DataFrame, n_assets: int) -> List[str]:
     corr_matrix = returns.corr()
@@ -50,9 +46,7 @@ def _select_by_sum_abs_correlation(returns: pd.DataFrame, n_assets: int) -> List
     return abs_corr_sum.head(n_assets).index.tolist()
 
 
-# ============================================================
 # 3. Seleção gulosa: minimizar correlação máxima
-# ============================================================
 
 def _select_by_min_max_correlation(returns: pd.DataFrame, n_assets: int) -> List[str]:
     corr = returns.corr().abs()
@@ -77,9 +71,7 @@ def _select_by_min_max_correlation(returns: pd.DataFrame, n_assets: int) -> List
     return selected
 
 
-# ============================================================
 # 4. NOVO — Seleção dos 5 pares menos correlacionados
-# ============================================================
 
 def _select_lowest_corr_pairs(returns: pd.DataFrame, n_pairs: int = 5) -> List[str]:
     corr = returns.corr()
@@ -109,9 +101,7 @@ def _select_lowest_corr_pairs(returns: pd.DataFrame, n_pairs: int = 5) -> List[s
     return selected
 
 
-# ============================================================
 # 5. NOVO — Seleção baseada em estabilidade temporal 2010→2025
-# ============================================================
 
 def _select_stable_pairs(
     prices: pd.DataFrame,
@@ -183,9 +173,7 @@ def _select_stable_pairs(
     return selected
 
 
-# ============================================================
 # 6. Função Master — escolhe a estratégia desejada
-# ============================================================
 
 def select_assets(
     start_date: str,
@@ -232,9 +220,7 @@ def select_assets(
     raise ValueError(f"Método '{method}' inválido.")
 
 
-# ============================================================
 # 7. Utilitário extra: obter matriz de correlação
-# ============================================================
 
 def get_correlation_matrix(returns: pd.DataFrame, selected_assets: List[str] = None):
     if selected_assets:

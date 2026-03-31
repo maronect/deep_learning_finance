@@ -7,6 +7,11 @@ data:
   end_date: "2025-12-31"
   frequency: "monthly"  # Options: daily, weekly, monthly
 
+asset_selection:
+  method: "stable_corr_pairs"   # Options: sum_abs_correlation, min_max_correlation, lowest_corr_pairs, stable_corr_pairs
+  n_assets: 10
+  min_data_coverage: 0.85
+
 features:
   lag_window: 24        # Number of past periods used as lag features (t-1 … t-lag_window)
   min_history: 36       # Minimum number of periods required per asset
