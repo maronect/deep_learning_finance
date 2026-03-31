@@ -1,0 +1,39 @@
+## Pipeline configuration
+## All pipeline parameters are defined here — no hardcoded values in source code.
+
+data:
+  tickers: []          # List of B3 tickers, e.g. ["PETR4.SA", "VALE3.SA"]
+  start_date: "2010-01-01"
+  end_date: "2025-12-31"
+  frequency: "monthly"  # Options: daily, weekly, monthly
+
+features:
+  lag_window: 24        # Number of past periods used as lag features (t-1 … t-lag_window)
+  min_history: 36       # Minimum number of periods required per asset
+
+models:
+  default: "ridge"      # Options: ridge, mlp, rnn
+  blend_alpha: 0.3      # Weight of ML prediction in blending: final_mu = alpha * ml + (1-alpha) * hist
+  train_ratio: 0.7      # Fraction of data used for training in walk-forward splits
+
+optimization:
+  risk_free_rate: 0.15  # Annual risk-free rate (SELIC 2025)
+  frequency: "monthly"  # Frequency for risk-free rate adjustment
+  solver: "SLSQP"
+  weight_bounds: [0.0, 1.0]  # No short selling
+
+evaluation:
+  metrics:
+    - sharpe_ratio
+    - annualized_return
+    - annualized_volatility
+    - cumulative_return
+
+artifacts:
+  base_dir: "artifacts"
+  data_dir: "artifacts/data"
+  models_dir: "artifacts/models"
+  predictions_dir: "artifacts/predictions"
+  metrics_dir: "artifacts/metrics"
+  weights_dir: "artifacts/weights"
+  runs_dir: "artifacts/runs"

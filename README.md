@@ -55,23 +55,85 @@ Com base na análise de 10 ações brasileiras no período de 2010-2025, os resu
 
 ```
 deep_learning_finance/
-├── notebooks/              # Experimentos e análises
-│   ├── 00-compare_models.ipynb    # Notebook principal comparativo
+├── config/                          # YAML configuration — no hardcoded parameters
+│   ├── pipeline.yaml                # Global pipeline parameters (assets, frequency, windows)
+│   ├── models.yaml                  # ML model hyperparameters (Ridge α, MLP layers, etc.)
+│   ├── optimization.yaml            # Markowitz parameters (risk-free rate, solver, bounds)
+│   └── api.yaml                     # FastAPI server settings (host, port, CORS)
+│
+├── src/
+│   ├── ingestion/                   # Stage 1: download and validate raw market data
+│   │   ├── downloader.py            # Fetch OHLCV prices from yfinance
+│   │   └── validators.py            # Check data completeness and integrity
+│   ├── features/                    # Stage 2: feature engineering
+│   │   ├── returns.py               # Compute returns at multiple frequencies
+│   │   ├── asset_selection.py       # Select uncorrelated assets (4 strategies)
+│   │   └── lag_features.py          # Build lag feature matrices for supervised learning
+│   ├── models/                      # Stage 3: ML model training and prediction
+│   │   ├── base.py                  # Abstract interface shared by all models
+│   │   ├── ridge.py                 # Ridge Regression with walk-forward validation
+│   │   ├── mlp.py                   # MLP with walk-forward validation
+│   │   ├── rnn.py                   # LSTM/RNN (PyTorch) — implemented, not yet integrated
+│   │   └── blending.py              # Blend ML predictions with historical mean
+│   ├── optimization/                # Stage 4: portfolio optimization
+│   │   ├── markowitz.py             # Markowitz formulation (return, covariance, constraints)
+│   │   ├── sharpe.py                # Maximize Sharpe Ratio via SLSQP
+│   │   └── evaluation.py            # Portfolio metrics (Sharpe, return, volatility, frontier)
+│   ├── pipeline/                    # Orchestration: full or partial pipeline execution
+│   │   ├── runner.py                # Entry point — runs all or selected stages
+│   │   ├── stages.py                # Each pipeline stage as an independent function
+│   │   └── context.py               # Shared state object passed between stages
+│   ├── api/                         # FastAPI serving layer (Stage 3 of roadmap)
+│   │   ├── main.py                  # App factory: middleware, routers, startup
+│   │   ├── routers/
+│   │   │   ├── health.py            # GET /health
+│   │   │   ├── assets.py            # GET /assets
+│   │   │   ├── predictions.py       # GET /predictions
+│   │   │   ├── pipeline.py          # POST /pipeline/run
+│   │   │   ├── portfolio.py         # GET /portfolio/weights, /portfolio/frontier
+│   │   │   └── metrics.py           # GET /metrics/model, /metrics/portfolio
+│   │   └── schemas/
+│   │       ├── requests.py          # Pydantic input schemas
+│   │       └── responses.py         # Pydantic output schemas
+│   └── utils/
+│       ├── config_loader.py         # Load and merge YAML configs
+│       ├── visualization.py         # Comparative charts (matplotlib/seaborn)
+│       └── export.py                # Persist artifacts to disk
+│
+├── artifacts/                       # Pipeline outputs (not committed to git)
+│   ├── data/                        # Processed returns and feature datasets
+│   ├── models/                      # Trained model parameters
+│   ├── predictions/                 # Expected return predictions per run
+│   ├── metrics/                     # Model and portfolio evaluation metrics
+│   ├── weights/                     # Optimized portfolio weights
+│   └── runs/                        # Execution logs (timestamp, config, status)
+│
+├── tests/
+│   ├── conftest.py                  # Shared fixtures (synthetic data, mock configs)
+│   ├── unit/                        # Fast, isolated function-level tests
+│   │   ├── test_returns.py
+│   │   ├── test_features.py
+│   │   ├── test_markowitz.py
+│   │   └── test_sharpe.py
+│   └── integration/                 # End-to-end tests across multiple components
+│       ├── test_pipeline.py
+│       └── test_api.py
+│
+├── notebooks/                       # Exploratory analysis (not part of the pipeline)
+│   ├── 00-compare_models.ipynb      # Legacy main pipeline — reference results
 │   ├── 01-markowitz_optimization.ipynb
 │   └── 02-linear_regretion.ipynb
-├── src/                    # Código modular e reutilizável
-│   ├── data/               # Carregamento e processamento de dados
-│   ├── models/             # Modelos de ML (LR, MLP)
-│   ├── optimization/       # Otimização de portfólios (Markowitz, Sharpe)
-│   └── utils/              # Utilitários (visualização, exportação)
-├── outputs/                # Resultados gerados
-│   ├── charts/             # Gráficos PNG de alta resolução
-│   ├── models/             # Métricas e pesos dos portfólios (CSV)
-│   └── predictions/        # Previsões de retornos (CSV)
-├── reports/                # Documentação teórica
-├── article_official/       # Artigo científico em LaTeX
-├── scripts/                # Scripts auxiliares
-└── requirements.txt        # Dependências do projeto
+│
+├── article_official/
+│   └── article.tex                  # Academic article in LaTeX
+│
+├── .github/workflows/ci.yml         # CI: test + Docker build on push/PR
+├── Dockerfile                        # Production image (API + pipeline)
+├── docker-compose.yml               # Local orchestration: API service
+├── pyproject.toml                   # Project metadata, pytest and ruff config
+├── requirements.txt                 # Production dependencies
+├── requirements-dev.txt             # Development and testing dependencies
+└── README.md
 ```
 
 ## Como Usar

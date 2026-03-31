@@ -1,0 +1,16 @@
+## Portfolio optimization parameters
+
+markowitz:
+  risk_free_rate: 0.15       # Annual risk-free rate used in Sharpe Ratio calculation
+  frequency: "monthly"       # Frequency for risk-free rate conversion
+  weight_bounds: [0.0, 1.0]  # [min, max] weight per asset — no short selling
+  sum_constraint: 1.0        # Weights must sum to this value
+
+solver:
+  method: "SLSQP"
+  options:
+    ftol: 1.0e-9
+    maxiter: 1000
+
+frontier:
+  n_points: 100              # Number of points on the efficient frontier

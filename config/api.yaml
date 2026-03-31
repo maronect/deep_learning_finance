@@ -1,0 +1,18 @@
+## FastAPI serving configuration
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  reload: false           # Set to true in development
+
+cors:
+  allow_origins: ["*"]    # Restrict in production
+  allow_methods: ["GET", "POST"]
+  allow_headers: ["*"]
+
+docs:
+  title: "Deep Learning Finance API"
+  description: "Portfolio optimization and ML return prediction service"
+  version: "0.1.0"
+  swagger_url: "/docs"
+  redoc_url: "/redoc"
