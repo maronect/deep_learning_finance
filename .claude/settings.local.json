@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l /home/maron/projetcs/deep_learning_finance/src/**/*.py)",
+      "Bash(python3:*)",
+      "Bash(grep:*)",
+      "Bash(ls -lah /home/maron/projetcs/deep_learning_finance/outputs/charts/*.py)",
+      "Bash(pip install:*)",
+      "Bash(python tests/smoke_test_data_layer.py)"
+    ]
+  }
+}
