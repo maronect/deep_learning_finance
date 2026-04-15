@@ -285,23 +285,35 @@ def stage_evaluate(context: PipelineContext) -> None:
 
 
 def stage_export_artifacts(context: PipelineContext) -> None:
-    """Persist pipeline outputs to the artifacts/ directory.
+    """Persist all pipeline outputs to the artifacts/ directory.
 
-    Writes portfolio weights, predicted returns, evaluation metrics, and a run
-    manifest to the paths defined in config/pipeline.yaml:artifacts.
+    Saves the following artifacts (Stage 2 full set):
+    - Processed historical returns (returns_selected)
+    - Feature matrix and target matrix
+    - Trained model (joblib)
+    - Predicted expected returns (blended_mu)
+    - Optimized portfolio weights
+    - Evaluation metrics
+    - Run manifest (JSON)
+
+    All paths are derived from config/pipeline.yaml:artifacts and the run_id.
 
     Args:
         context: Shared pipeline state.
-            Reads: weights, selected_assets, blended_mu, metrics, run_id, pipeline_cfg.
+            Reads: returns_selected, feature_matrix, target_matrix, _trained_model,
+                   blended_mu, weights, selected_assets, metrics, run_id, pipeline_cfg.
             Writes: artifacts_written, status.
 
     Raises:
         ValueError: If required prior stages have not been run.
     """
     from src.utils.export import (
+        save_features,
+        save_model,
         save_portfolio_metrics,
         save_portfolio_weights,
         save_predicted_returns,
+        save_returns,
     )
 
     if context.weights is None or context.metrics is None:
@@ -313,18 +325,42 @@ def stage_export_artifacts(context: PipelineContext) -> None:
     run_id = context.run_id
     model_name: str = context.pipeline_cfg["models"].get("default", "ridge")
 
-    weights_path = f"{art_cfg['weights_dir']}/{run_id}_{model_name}_weights.csv"
+    # Build artifact paths
+    returns_path = f"{art_cfg['data_dir']}/{run_id}_returns.csv"
+    X_path = f"{art_cfg['data_dir']}/{run_id}_features.csv"
+    y_path = f"{art_cfg['data_dir']}/{run_id}_targets.csv"
+    model_path = f"{art_cfg['models_dir']}/{run_id}_{model_name}.joblib"
     preds_path = f"{art_cfg['predictions_dir']}/{run_id}_{model_name}_predictions.csv"
+    weights_path = f"{art_cfg['weights_dir']}/{run_id}_{model_name}_weights.csv"
     metrics_path = f"{art_cfg['metrics_dir']}/{run_id}_{model_name}_metrics.csv"
     manifest_path = f"{art_cfg['runs_dir']}/{run_id}_manifest.json"
 
-    save_portfolio_weights(context.weights, context.selected_assets, model_name, weights_path)
+    # Persist intermediate data artifacts
+    if context.returns_selected is not None:
+        save_returns(context.returns_selected, returns_path)
+
+    if context.feature_matrix is not None and context.target_matrix is not None:
+        save_features(context.feature_matrix, context.target_matrix, X_path, y_path)
+
+    # Persist trained model
+    trained_model = getattr(context, "_trained_model", None)
+    if trained_model is not None:
+        save_model(trained_model, model_path)
+
+    # Persist final pipeline outputs
     save_predicted_returns(context.blended_mu, model_name, preds_path)
+    save_portfolio_weights(context.weights, context.selected_assets, model_name, weights_path)
     save_portfolio_metrics(context.metrics, metrics_path)
 
+    # Persist run manifest (includes metrics for registry)
+    manifest = context.to_run_manifest()
+    manifest["metrics"] = context.metrics
     Path(manifest_path).parent.mkdir(parents=True, exist_ok=True)
     with open(manifest_path, "w") as f:
-        json.dump(context.to_run_manifest(), f, indent=2, default=str)
+        json.dump(manifest, f, indent=2, default=str)
 
-    context.artifacts_written = [weights_path, preds_path, metrics_path, manifest_path]
+    context.artifacts_written = [
+        returns_path, X_path, y_path, model_path,
+        preds_path, weights_path, metrics_path, manifest_path,
+    ]
     context.status = "completed"

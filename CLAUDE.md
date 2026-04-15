@@ -20,24 +20,41 @@ Technical architecture reference: see **ARCHITECTURE.md**.
 
 ---
 
-## Current Stage: Stage 1 — Refactoring (in progress)
+## Current Stage: Stage 3 — API implementation (next)
 
-**Completed in Stage 1:**
-- New directory structure created (`config/`, `src/ingestion/`, `src/features/`, `src/pipeline/`, `src/api/`, `artifacts/`, `tests/`)
-- YAML-based config system: `config/pipeline.yaml`, `models.yaml`, `optimization.yaml`, `api.yaml`
-- `src/utils/config_loader.py` — implemented, all modules must use this to read config
-- `src/ingestion/` — **fully implemented**: `downloader.py`, `validators.py`, `__init__.py` (with `DataLayerResult` + `run_data_ingestion()`)
-- `src/features/returns.py` — **fully implemented**: `compute_returns`, `ajustar_risk_free`, `converter_periodo`
-- `src/features/asset_selection.py` — **fully implemented**: all 4 strategies + `select_assets()` + `select_assets_from_config()`
-- `tests/smoke_test_data_layer.py` — 22 assert-based smoke tests for the data layer
-- CI workflow (`.github/workflows/ci.yml`), `docker-compose.yml`, `pyproject.toml`
+### Stage 1 — COMPLETE
+- Directory structure, YAML config system (`config/pipeline.yaml`, `models.yaml`, `optimization.yaml`, `api.yaml`)
+- `src/utils/config_loader.py`, `src/utils/export.py`, `src/utils/portfolio_utils.py`
+- `src/ingestion/` — `downloader.py`, `validators.py`, `__init__.py` (`DataLayerResult` + `run_data_ingestion()`)
+- `src/features/returns.py` — `compute_returns`, `ajustar_risk_free`, `converter_periodo`
+- `src/features/asset_selection.py` — all 4 strategies + `select_assets()` + `select_assets_from_config()`
+- `src/features/lag_features.py` — `build_lag_features`, `make_walk_forward_splits`
+- `src/models/base.py` — `BaseReturnModel` (ABC)
+- `src/models/ridge.py` — `RidgeReturnModel`
+- `src/models/mlp.py` — `MLPReturnModel`
+- `src/models/blending.py` — `blend_predictions`, `blend_from_config`
+- `src/pipeline/context.py` — `PipelineContext` dataclass
+- `src/pipeline/stages.py` — 8 stage functions (ingest → export)
+- `src/pipeline/runner.py` — `run_pipeline()`, `STAGE_REGISTRY`, `STAGE_ORDER`
+- `tests/smoke_test_data_layer.py` — 22 passing assert-based smoke tests
+- CI workflow, `docker-compose.yml`, `pyproject.toml`
 
-**Still stub (docstring only — not yet implemented):**
-- `src/features/lag_features.py`
-- `src/models/base.py`, `ridge.py`, `mlp.py`, `blending.py`
-- `src/pipeline/runner.py`, `stages.py`, `context.py`
-- `src/api/main.py`, all routers, all schemas
-- `tests/unit/` and `tests/integration/` test files
+### Stage 2 — COMPLETE
+- `src/utils/export.py` — extended: `save_returns`, `save_features`, `save_model`, `load_model`
+- `src/pipeline/registry.py` — `list_runs()`, `load_run_manifest()`, `compare_runs()`
+- `src/pipeline/stages.py:stage_export_artifacts` — saves ALL artifact types:
+  - `artifacts/data/{run_id}_returns.csv` — processed returns
+  - `artifacts/data/{run_id}_features.csv` + `_targets.csv` — feature/target matrices
+  - `artifacts/models/{run_id}_{model}.joblib` — trained model (reloadable via `load_model`)
+  - `artifacts/predictions/{run_id}_{model}_predictions.csv` — blended mu
+  - `artifacts/weights/{run_id}_{model}_weights.csv` — portfolio weights
+  - `artifacts/metrics/{run_id}_{model}_metrics.csv` — evaluation metrics
+  - `artifacts/runs/{run_id}_manifest.json` — full run manifest (config + metrics + asset list)
+- All pipeline parameters flow from `config/pipeline.yaml` — no hardcoded values
+
+### Still stub (not yet implemented):
+- `src/api/main.py`, all routers, all schemas (Stage 3)
+- `tests/unit/` and `tests/integration/` test files (Stage 6)
 
 **Legacy files (preserved for notebook compatibility — do not modify or delete):**
 - `src/data/loader.py` — original loader, still used by notebooks
