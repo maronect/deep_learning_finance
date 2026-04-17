@@ -20,7 +20,7 @@ Technical architecture reference: see **ARCHITECTURE.md**.
 
 ---
 
-## Current Stage: Stage 3 — API implementation (next)
+## Current Stage: Stage 4 — Persistence of results and model artifacts (next)
 
 ### Stage 1 — COMPLETE
 - Directory structure, YAML config system (`config/pipeline.yaml`, `models.yaml`, `optimization.yaml`, `api.yaml`)
@@ -52,8 +52,21 @@ Technical architecture reference: see **ARCHITECTURE.md**.
   - `artifacts/runs/{run_id}_manifest.json` — full run manifest (config + metrics + asset list)
 - All pipeline parameters flow from `config/pipeline.yaml` — no hardcoded values
 
+### Stage 3 — COMPLETE
+- `src/api/main.py` — FastAPI app factory, CORS, all routers registered
+- `src/api/deps.py` — shared helpers: `resolve_run()`, artifact path resolvers
+- `src/api/schemas/requests.py` — `PipelineRunRequest` with stage validation
+- `src/api/schemas/responses.py` — all response models (Health, Assets, Predictions, Weights, Frontier, Metrics, Runs)
+- `src/api/routers/health.py` — `GET /health`
+- `src/api/routers/assets.py` — `GET /assets`
+- `src/api/routers/predictions.py` — `GET /predictions`
+- `src/api/routers/pipeline.py` — `POST /pipeline/run`, `GET /pipeline/runs`, `GET /pipeline/runs/{run_id}`, `GET /pipeline/stages`
+- `src/api/routers/portfolio.py` — `GET /portfolio/weights`, `GET /portfolio/frontier`
+- `src/api/routers/metrics.py` — `GET /metrics/portfolio`, `GET /metrics/model`
+- Swagger docs at `/docs`, ReDoc at `/redoc`
+- `requirements.txt` — added `fastapi`, `uvicorn[standard]`
+
 ### Still stub (not yet implemented):
-- `src/api/main.py`, all routers, all schemas (Stage 3)
 - `tests/unit/` and `tests/integration/` test files (Stage 6)
 
 **Legacy files (preserved for notebook compatibility — do not modify or delete):**

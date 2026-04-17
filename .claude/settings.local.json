@@ -8,7 +8,12 @@
       "Bash(pip install:*)",
       "Bash(python tests/smoke_test_data_layer.py)",
       "Bash(wc:*)",
-      "Bash(python -c \":*)"
+      "Bash(python -c \":*)",
+      "Bash(python *)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(curl -s http://localhost:8000/assets)",
+      "Bash(curl -s http://localhost:8000/pipeline/stages)",
+      "Bash(kill %1)"
     ]
   }
 }

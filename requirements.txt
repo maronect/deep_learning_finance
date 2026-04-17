@@ -12,3 +12,6 @@ dash
 plotly
 ipykernel
 pytest
+fastapi
+uvicorn[standard]
+joblib
