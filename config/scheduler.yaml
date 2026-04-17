@@ -1,0 +1,11 @@
+scheduler:
+  enabled: true
+  trigger: "interval"       # "interval" or "cron"
+  interval_hours: 24        # used when trigger=interval
+  cron: "0 9 * * *"        # used when trigger=cron (9 AM UTC daily, mon-fri recommended)
+  max_instances: 1          # prevent overlapping pipeline runs
+  misfire_grace_seconds: 3600  # allow up to 1h late execution on restart
+
+logging:
+  dir: "artifacts/logs"
+  level: "INFO"

@@ -1,0 +1,10 @@
+2026-04-17T01:36:17 [INFO] Scheduled pipeline run started. run_id=20260417T013617756637_scheduled
+2026-04-17T01:36:17 [INFO] Log file: artifacts/logs/20260417T013617756637_scheduled.log
+2026-04-17T01:36:17 [INFO] Executing pipeline (all stages)...
+2026-04-17T01:36:21 [INFO] Pipeline finished with status=completed
+2026-04-17T01:36:21 [ERROR] Unhandled exception in scheduled run:
+Traceback (most recent call last):
+  File "/workspaces/deep_learning_finance/src/scheduler/jobs.py", line 81, in run_scheduled_pipeline
+    sharpe = m.get("Sharpe", "n/a")
+AttributeError: 'str' object has no attribute 'get'
+

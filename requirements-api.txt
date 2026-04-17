@@ -10,3 +10,4 @@ yfinance
 fastapi
 uvicorn[standard]
 joblib
+apscheduler>=3.10

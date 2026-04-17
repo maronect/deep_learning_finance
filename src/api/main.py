@@ -12,8 +12,9 @@ from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.routers import assets, health, history, metrics, pipeline, portfolio, predictions
+from src.api.routers import assets, health, history, metrics, pipeline, portfolio, predictions, scheduler
 from src.persistence.database import init_db, sync_from_manifests
+from src.scheduler.scheduler import build_scheduler
 from src.utils.config_loader import get_config
 
 
@@ -21,12 +22,19 @@ from src.utils.config_loader import get_config
 async def _lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler.
 
-    On startup: ensures the SQLite schema exists and syncs any manifest files
-    that predate the persistence layer (e.g. from Stage 1/2 runs).
+    On startup: ensures the SQLite schema exists, syncs any manifest files
+    that predate the persistence layer, and starts the APScheduler for
+    periodic pipeline retraining.
+    On shutdown: gracefully stops the scheduler.
     """
     init_db()
     sync_from_manifests()
+    sched = build_scheduler()
+    if sched is not None:
+        sched.start()
     yield
+    if sched is not None:
+        sched.shutdown(wait=False)
 
 
 def create_app() -> FastAPI:
@@ -68,6 +76,7 @@ def create_app() -> FastAPI:
     app.include_router(portfolio.router)
     app.include_router(metrics.router)
     app.include_router(history.router)
+    app.include_router(scheduler.router)
 
     return app
 

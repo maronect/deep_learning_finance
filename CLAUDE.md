@@ -20,7 +20,7 @@ Technical architecture reference: see **ARCHITECTURE.md**.
 
 ---
 
-## Current Stage: Stage 8 — Automated data update and model retraining (next)
+## Current Stage: Stage 9 — Application deployment (next)
 
 ### Stage 1 — COMPLETE
 - Directory structure, YAML config system (`config/pipeline.yaml`, `models.yaml`, `optimization.yaml`, `api.yaml`)
@@ -89,6 +89,22 @@ Technical architecture reference: see **ARCHITECTURE.md**.
 - `.dockerignore` — expanded: excludes `.git/`, `notebooks/`, `outputs/`, `artifacts/`, `tests/`, `article_official/`, bytecode, IDE files
 
 Image size reduction: `torch` alone is ~2 GB; the API image installs only what the pipeline + FastAPI needs.
+
+### Stage 8 — COMPLETE
+- `config/scheduler.yaml` — scheduler config: `enabled`, `trigger` (interval/cron), `interval_hours`, `cron`, `max_instances`, `misfire_grace_seconds`, log dir
+- `src/scheduler/__init__.py` — package init
+- `src/scheduler/jobs.py` — `run_scheduled_pipeline()`: generates timestamped run_id (microsecond precision), writes per-run log to `artifacts/logs/{run_id}.log`, calls `run_pipeline()`, logs stage progress and final metrics, propagates failures
+- `src/scheduler/scheduler.py` — `build_scheduler()`: reads config, creates APScheduler `BackgroundScheduler` with `IntervalTrigger` or `CronTrigger`, registers `pipeline_retrain` job; `get_scheduler()` singleton getter
+- `src/api/routers/scheduler.py` — 4 endpoints:
+  - `GET /scheduler/status` — enabled flag, running state, job list with next_run_time
+  - `POST /scheduler/trigger` — manual one-shot pipeline trigger via BackgroundTasks
+  - `GET /scheduler/logs` — list log files in `artifacts/logs/` with metadata
+  - `GET /scheduler/logs/{run_id}` — return full log content (404 if missing)
+- `src/api/main.py` — lifespan extended: `build_scheduler()` + `sched.start()` on startup, `sched.shutdown(wait=False)` on teardown
+- `requirements.txt` + `requirements-api.txt` — added `apscheduler>=3.10`
+- `tests/unit/test_scheduler.py` — 10 tests: scheduler construction (interval/cron triggers, disabled=None), job execution (log file created, run_id in content, failure raises, exception propagates)
+- `tests/integration/test_scheduler_api.py` — 18 tests: all 4 endpoints, schema validation, 404 on unknown log
+- **142 total tests passing** (22 smoke + 71 unit + 53+18 integration)
 
 ### Stage 7 — COMPLETE
 - `.github/workflows/ci.yml` — 3-job pipeline: `lint → test → docker`
