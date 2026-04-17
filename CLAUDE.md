@@ -20,7 +20,7 @@ Technical architecture reference: see **ARCHITECTURE.md**.
 
 ---
 
-## Current Stage: Stage 5 — Containerization with Docker (next)
+## Current Stage: Stage 6 — Automated testing (next)
 
 ### Stage 1 — COMPLETE
 - Directory structure, YAML config system (`config/pipeline.yaml`, `models.yaml`, `optimization.yaml`, `api.yaml`)
@@ -81,6 +81,14 @@ Technical architecture reference: see **ARCHITECTURE.md**.
   - `GET /history/runs/compare` — side-by-side `?run_ids=id1,id2,...`
   - `GET /history/runs/{run_id}` — single record from DB
   - `POST /history/sync` — rebuild DB from manifest files
+
+### Stage 5 — COMPLETE
+- `Dockerfile` — rewritten: `python:3.10-slim`, no Node.js/Claude Code, uses `requirements-api.txt`, creates artifact dirs, `CMD uvicorn`
+- `docker-compose.yml` — rewritten: no deprecated `version`, healthcheck on `/health`, `restart: unless-stopped`, volumes for `artifacts/` and `config/`
+- `requirements-api.txt` — lean API-only deps (9 packages): excludes `torch`, `matplotlib`, `dash`, `plotly`, `ipykernel`, `seaborn`, `tikzplotlib` (notebook-only or legacy)
+- `.dockerignore` — expanded: excludes `.git/`, `notebooks/`, `outputs/`, `artifacts/`, `tests/`, `article_official/`, bytecode, IDE files
+
+Image size reduction: `torch` alone is ~2 GB; the API image installs only what the pipeline + FastAPI needs.
 
 ### Still stub (not yet implemented):
 - `tests/unit/` and `tests/integration/` test files (Stage 6)

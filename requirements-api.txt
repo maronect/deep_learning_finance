@@ -1,0 +1,12 @@
+# Runtime dependencies for the API container.
+# Excludes torch, matplotlib, seaborn, dash, plotly, ipykernel, tikzplotlib
+# which are only used by legacy notebooks (src/models/rnn.py, notebooks/).
+numpy
+scipy
+pandas
+pyyaml
+scikit-learn
+yfinance
+fastapi
+uvicorn[standard]
+joblib
