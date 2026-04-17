@@ -20,7 +20,7 @@ Technical architecture reference: see **ARCHITECTURE.md**.
 
 ---
 
-## Current Stage: Stage 7 — CI/CD configuration (next)
+## Current Stage: Stage 8 — Automated data update and model retraining (next)
 
 ### Stage 1 — COMPLETE
 - Directory structure, YAML config system (`config/pipeline.yaml`, `models.yaml`, `optimization.yaml`, `api.yaml`)
@@ -89,6 +89,15 @@ Technical architecture reference: see **ARCHITECTURE.md**.
 - `.dockerignore` — expanded: excludes `.git/`, `notebooks/`, `outputs/`, `artifacts/`, `tests/`, `article_official/`, bytecode, IDE files
 
 Image size reduction: `torch` alone is ~2 GB; the API image installs only what the pipeline + FastAPI needs.
+
+### Stage 7 — COMPLETE
+- `.github/workflows/ci.yml` — 3-job pipeline: `lint → test → docker`
+  - **lint**: `ruff check src/ tests/` (excludes legacy files)
+  - **test**: matrix Python 3.10 + 3.11; installs `requirements-api.txt` + `requirements-dev.txt` (no torch); runs smoke → unit → integration
+  - **docker**: `docker/build-push-action` with GitHub Actions cache (`type=gha`); only on `push` events, not PRs
+- `pyproject.toml` — fixed `requires-python = ">=3.10"`, `target-version = "py310"`, added `ruff.exclude` for legacy files
+- `requirements-dev.txt` — added `ruff>=0.4`
+- Fixed lint errors in non-legacy files: removed unused imports from `evaluation.py`, `export.py`, `runner.py`, `test_pipeline.py`, `test_markowitz.py`, `test_sharpe.py`
 
 ### Stage 6 — COMPLETE
 - `tests/conftest.py` — shared fixtures: `price_df`, `return_df`, `small_return_df`, `pipeline_cfg`, `minimal_context`

@@ -4,8 +4,6 @@ Calcula métricas financeiras como Sharpe Ratio, retorno anualizado, volatilidad
 """
 import numpy as np
 import pandas as pd
-from src.optimization.markowitz import portfolio_return, portfolio_volatility
-
 
 def calculate_sharpe_ratio(
     portfolio_returns: pd.Series,

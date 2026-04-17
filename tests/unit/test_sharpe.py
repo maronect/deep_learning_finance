@@ -7,7 +7,6 @@ bounds, and produces a higher Sharpe than an equally-weighted portfolio.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from src.optimization.sharpe import maximize_sharpe
 from src.optimization.markowitz import portfolio_return, portfolio_volatility

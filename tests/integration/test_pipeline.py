@@ -12,8 +12,6 @@ PipelineContext that already has the ingestion outputs filled in.
 from __future__ import annotations
 
 import datetime
-import shutil
-import tempfile
 from pathlib import Path
 
 import numpy as np

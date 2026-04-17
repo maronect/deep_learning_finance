@@ -6,8 +6,6 @@ metrics) are saved here. No ad-hoc CSV writes anywhere else in src/.
 """
 from __future__ import annotations
 
-import json
-
 import joblib
 import numpy as np
 import pandas as pd

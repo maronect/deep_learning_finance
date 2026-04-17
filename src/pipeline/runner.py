@@ -115,7 +115,7 @@ def main() -> None:
     ctx = run_pipeline(stages=stages)
     print(f"Pipeline completed. Run ID: {ctx.run_id}")
     if ctx.artifacts_written:
-        print(f"Artifacts written:")
+        print("Artifacts written:")
         for path in ctx.artifacts_written:
             print(f"  {path}")
     if ctx.metrics:

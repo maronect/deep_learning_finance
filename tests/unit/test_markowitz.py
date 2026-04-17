@@ -7,7 +7,6 @@ Validates portfolio return/volatility calculations, weight constraint enforcemen
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from src.optimization.markowitz import (
     minimize_volatility,

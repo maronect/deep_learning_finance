@@ -13,7 +13,8 @@
       "Bash(curl -s http://localhost:8000/health)",
       "Bash(curl -s http://localhost:8000/assets)",
       "Bash(curl -s http://localhost:8000/pipeline/stages)",
-      "Bash(kill %1)"
+      "Bash(kill %1)",
+      "Bash(ruff check *)"
     ]
   }
 }
