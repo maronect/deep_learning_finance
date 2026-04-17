@@ -20,7 +20,7 @@ Technical architecture reference: see **ARCHITECTURE.md**.
 
 ---
 
-## Current Stage: Stage 6 — Automated testing (next)
+## Current Stage: Stage 7 — CI/CD configuration (next)
 
 ### Stage 1 — COMPLETE
 - Directory structure, YAML config system (`config/pipeline.yaml`, `models.yaml`, `optimization.yaml`, `api.yaml`)
@@ -90,8 +90,17 @@ Technical architecture reference: see **ARCHITECTURE.md**.
 
 Image size reduction: `torch` alone is ~2 GB; the API image installs only what the pipeline + FastAPI needs.
 
-### Still stub (not yet implemented):
-- `tests/unit/` and `tests/integration/` test files (Stage 6)
+### Stage 6 — COMPLETE
+- `tests/conftest.py` — shared fixtures: `price_df`, `return_df`, `small_return_df`, `pipeline_cfg`, `minimal_context`
+- `tests/unit/test_returns.py` — 17 tests: `compute_returns` (shape, values, edge cases), `ajustar_risk_free` (round-trip all freqs), `converter_periodo`
+- `tests/unit/test_markowitz.py` — 17 tests: `portfolio_return`, `portfolio_volatility`, `minimize_volatility`, `solve_markowitz` (lambda sweep, max_weight)
+- `tests/unit/test_sharpe.py` — 8 tests: `maximize_sharpe` (feasibility, bounds, dominance)
+- `tests/unit/test_features.py` — 19 tests: `build_lag_features` (shape, no-look-ahead, NaN-free), `make_walk_forward_splits` (count, expansion, edge cases)
+- `tests/integration/test_api.py` — 34 tests: all endpoints (health, assets, predictions, pipeline, portfolio, metrics, history), error codes, schema validation
+- `tests/integration/test_pipeline.py` — 19 tests: per-stage correctness, full pipeline with synthetic data, artifact files, manifest JSON, metrics finite
+- Fixed `stage_export_artifacts`: manifest now written AFTER `context.status = "completed"` (was written with `status='running'` before)
+- `requirements-dev.txt` — `httpx` required by FastAPI TestClient (already listed)
+- **136 total tests passing** (22 smoke + 61 unit + 53 integration)
 
 **Legacy files (preserved for notebook compatibility — do not modify or delete):**
 - `src/data/loader.py` — original loader, still used by notebooks

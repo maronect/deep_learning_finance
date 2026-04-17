@@ -352,6 +352,12 @@ def stage_export_artifacts(context: PipelineContext) -> None:
     save_portfolio_weights(context.weights, context.selected_assets, model_name, weights_path)
     save_portfolio_metrics(context.metrics, metrics_path)
 
+    context.artifacts_written = [
+        returns_path, X_path, y_path, model_path,
+        preds_path, weights_path, metrics_path, manifest_path,
+    ]
+    context.status = "completed"
+
     # Persist run manifest (includes metrics for registry)
     manifest = context.to_run_manifest()
     manifest["metrics"] = context.metrics
@@ -359,14 +365,6 @@ def stage_export_artifacts(context: PipelineContext) -> None:
     with open(manifest_path, "w") as f:
         json.dump(manifest, f, indent=2, default=str)
 
-    context.artifacts_written = [
-        returns_path, X_path, y_path, model_path,
-        preds_path, weights_path, metrics_path, manifest_path,
-    ]
-    context.status = "completed"
-
     # Stage 4: persist run record to SQLite for queryable historical storage.
     from src.persistence.database import upsert_run
-    manifest["artifacts_written"] = context.artifacts_written
-    manifest["status"] = context.status
     upsert_run(manifest)
