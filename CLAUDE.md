@@ -20,7 +20,7 @@ Technical architecture reference: see **ARCHITECTURE.md**.
 
 ---
 
-## Current Stage: Stage 4 — Persistence of results and model artifacts (next)
+## Current Stage: Stage 5 — Containerization with Docker (next)
 
 ### Stage 1 — COMPLETE
 - Directory structure, YAML config system (`config/pipeline.yaml`, `models.yaml`, `optimization.yaml`, `api.yaml`)
@@ -65,6 +65,22 @@ Technical architecture reference: see **ARCHITECTURE.md**.
 - `src/api/routers/metrics.py` — `GET /metrics/portfolio`, `GET /metrics/model`
 - Swagger docs at `/docs`, ReDoc at `/redoc`
 - `requirements.txt` — added `fastapi`, `uvicorn[standard]`
+
+### Stage 4 — COMPLETE
+- `src/persistence/__init__.py` + `src/persistence/database.py` — SQLite persistence layer
+  - `init_db()` — creates `artifacts/pipeline_runs.db` with `runs` table (CREATE IF NOT EXISTS)
+  - `upsert_run(manifest)` — INSERT OR UPDATE from manifest dict (idempotent)
+  - `get_run(run_id)` — single record lookup
+  - `list_runs(status, limit)` — filtered, paginated query (newest first)
+  - `compare_runs(run_ids)` — side-by-side retrieval preserving input order
+  - `sync_from_manifests()` — scans `artifacts/runs/*.json` and upserts all into DB
+- `src/pipeline/stages.py:stage_export_artifacts` — now calls `upsert_run()` after manifest write
+- `src/api/main.py` — lifespan handler: `init_db()` + `sync_from_manifests()` on startup
+- `src/api/routers/history.py` — 4 new endpoints:
+  - `GET /history/runs` — DB-backed list with `?status=` and `?limit=` filters
+  - `GET /history/runs/compare` — side-by-side `?run_ids=id1,id2,...`
+  - `GET /history/runs/{run_id}` — single record from DB
+  - `POST /history/sync` — rebuild DB from manifest files
 
 ### Still stub (not yet implemented):
 - `tests/unit/` and `tests/integration/` test files (Stage 6)

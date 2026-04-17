@@ -364,3 +364,9 @@ def stage_export_artifacts(context: PipelineContext) -> None:
         preds_path, weights_path, metrics_path, manifest_path,
     ]
     context.status = "completed"
+
+    # Stage 4: persist run record to SQLite for queryable historical storage.
+    from src.persistence.database import upsert_run
+    manifest["artifacts_written"] = context.artifacts_written
+    manifest["status"] = context.status
+    upsert_run(manifest)

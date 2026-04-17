@@ -6,11 +6,27 @@ and includes all routers. This is the entry point for uvicorn.
 """
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.routers import assets, health, metrics, pipeline, portfolio, predictions
+from src.api.routers import assets, health, history, metrics, pipeline, portfolio, predictions
+from src.persistence.database import init_db, sync_from_manifests
 from src.utils.config_loader import get_config
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    """Application lifespan handler.
+
+    On startup: ensures the SQLite schema exists and syncs any manifest files
+    that predate the persistence layer (e.g. from Stage 1/2 runs).
+    """
+    init_db()
+    sync_from_manifests()
+    yield
 
 
 def create_app() -> FastAPI:
@@ -35,6 +51,7 @@ def create_app() -> FastAPI:
         version=docs_cfg.get("version", "0.1.0"),
         docs_url=docs_cfg.get("swagger_url", "/docs"),
         redoc_url=docs_cfg.get("redoc_url", "/redoc"),
+        lifespan=_lifespan,
     )
 
     app.add_middleware(
@@ -50,6 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(pipeline.router)
     app.include_router(portfolio.router)
     app.include_router(metrics.router)
+    app.include_router(history.router)
 
     return app
 

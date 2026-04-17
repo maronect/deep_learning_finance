@@ -142,3 +142,50 @@ class ModelMetricsResponse(BaseModel):
     train_ratio: Optional[float]
     lag_window: Optional[int]
     note: str
+
+
+class RunRecord(BaseModel):
+    """Full persisted record for a single pipeline run (from SQLite)."""
+
+    run_id: str
+    started_at: str
+    status: str
+    model: str
+    blend_alpha: Optional[float]
+    train_ratio: Optional[float]
+    lag_window: Optional[int]
+    frequency: Optional[str]
+    risk_free_rate: Optional[float]
+    n_assets: int
+    selected_assets: list[str]
+    sharpe: Optional[float]
+    annualized_return: Optional[float]
+    annualized_volatility: Optional[float]
+    cumulative_return: Optional[float]
+    mean_return: Optional[float]
+    volatility: Optional[float]
+    artifacts_written: list[str]
+    error: Optional[str]
+    synced_at: Optional[str]
+
+
+class RunsDbListResponse(BaseModel):
+    """Response for GET /history/runs (DB-backed list)."""
+
+    runs: list[RunRecord]
+    count: int
+
+
+class CompareRunsResponse(BaseModel):
+    """Response for GET /history/runs/compare."""
+
+    run_ids: list[str]
+    found: int
+    runs: list[RunRecord]
+
+
+class SyncResponse(BaseModel):
+    """Response for POST /history/sync."""
+
+    synced: int
+    message: str
