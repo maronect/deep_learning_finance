@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deep Learning Finance — Portfolio Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            surface: '#0f1117',
+            panel:   '#1a1d27',
+            border:  '#2a2d3a',
+            accent:  '#4f8ef7',
+            muted:   '#6b7280',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background-color: #0f1117; }
+    .skeleton {
+      background: linear-gradient(90deg, #1a1d27 25%, #22263a 50%, #1a1d27 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 4px;
+    }
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+    }
+    .status-ok   { background: #22c55e; box-shadow: 0 0 6px #22c55e88; }
+    .status-err  { background: #ef4444; box-shadow: 0 0 6px #ef444488; }
+    .status-wait { background: #f59e0b; }
+    thead th { position: sticky; top: 0; z-index: 1; }
+    .table-wrap { max-height: 320px; overflow-y: auto; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1a1d27; }
+    ::-webkit-scrollbar-thumb { background: #2a2d3a; border-radius: 3px; }
+    canvas { display: block; }
+  </style>
+</head>
+<body class="text-gray-100 min-h-screen font-mono">
+
+  <!-- ================================================================
+       HEADER
+  ================================================================ -->
+  <header class="border-b border-border px-6 py-4 flex items-center justify-between">
+    <div>
+      <span class="text-sm text-muted uppercase tracking-widest">ML Engineering</span>
+      <h1 class="text-xl font-semibold text-white mt-0.5">Deep Learning Finance</h1>
+      <p class="text-xs text-muted mt-0.5">Brazilian Equity Portfolio Optimization — B3 2010-2025</p>
+    </div>
+    <div class="text-right">
+      <div id="api-status" class="flex items-center justify-end text-sm">
+        <span class="status-dot status-wait" id="status-dot"></span>
+        <span id="status-text" class="text-muted">connecting...</span>
+      </div>
+      <div id="api-version" class="text-xs text-muted mt-1"></div>
+      <div class="text-xs text-muted mt-1">
+        <a href="https://dlfinance-api.fly.dev/docs" target="_blank" class="hover:text-accent transition-colors">
+          API Docs
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="px-6 py-6 space-y-6 max-w-screen-xl mx-auto">
+
+    <!-- ================================================================
+         SUMMARY CARDS
+    ================================================================ -->
+    <section>
+      <h2 class="text-xs text-muted uppercase tracking-widest mb-3">Summary</h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-panel border border-border rounded-lg p-4">
+          <p class="text-xs text-muted mb-1">Runs Available</p>
+          <p id="card-runs" class="text-2xl font-semibold text-white">--</p>
+        </div>
+        <div class="bg-panel border border-border rounded-lg p-4">
+          <p class="text-xs text-muted mb-1">Assets Selected</p>
+          <p id="card-assets" class="text-2xl font-semibold text-white">--</p>
+        </div>
+        <div class="bg-panel border border-border rounded-lg p-4">
+          <p class="text-xs text-muted mb-1">Sharpe Ratio</p>
+          <p id="card-sharpe" class="text-2xl font-semibold text-accent">--</p>
+        </div>
+        <div class="bg-panel border border-border rounded-lg p-4">
+          <p class="text-xs text-muted mb-1">Annualized Return</p>
+          <p id="card-return" class="text-2xl font-semibold text-white">--</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================
+         CHARTS ROW
+    ================================================================ -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- Portfolio Weights -->
+      <div class="bg-panel border border-border rounded-lg p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-white">Portfolio Weights</h2>
+          <span id="weights-model" class="text-xs text-muted bg-border px-2 py-0.5 rounded"></span>
+        </div>
+        <div id="weights-loading" class="skeleton h-52 w-full"></div>
+        <div id="weights-error" class="hidden text-xs text-red-400 mt-2"></div>
+        <div id="weights-chart-wrap" class="hidden">
+          <canvas id="weights-chart" height="210"></canvas>
+        </div>
+      </div>
+
+      <!-- Efficient Frontier -->
+      <div class="bg-panel border border-border rounded-lg p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-white">Efficient Frontier</h2>
+          <span class="text-xs text-muted">x = Volatility, y = Expected Return</span>
+        </div>
+        <div id="frontier-loading" class="skeleton h-52 w-full"></div>
+        <div id="frontier-error" class="hidden text-xs text-red-400 mt-2"></div>
+        <div id="frontier-chart-wrap" class="hidden">
+          <canvas id="frontier-chart" height="210"></canvas>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ================================================================
+         TABLES ROW
+    ================================================================ -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- Predictions -->
+      <div class="bg-panel border border-border rounded-lg p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-white">Expected Returns by Asset</h2>
+          <span id="pred-model" class="text-xs text-muted bg-border px-2 py-0.5 rounded"></span>
+        </div>
+        <div id="pred-loading" class="skeleton h-48 w-full"></div>
+        <div id="pred-error" class="hidden text-xs text-red-400 mt-2"></div>
+        <div id="pred-table-wrap" class="hidden table-wrap">
+          <table class="w-full text-xs">
+            <thead class="bg-panel">
+              <tr class="text-left text-muted border-b border-border">
+                <th class="pb-2 pr-4">Ticker</th>
+                <th class="pb-2 pr-4 text-right">Predicted Return</th>
+                <th class="pb-2 text-right">Model</th>
+              </tr>
+            </thead>
+            <tbody id="pred-body" class="divide-y divide-border"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Run History -->
+      <div class="bg-panel border border-border rounded-lg p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-white">Execution History</h2>
+          <span id="history-count" class="text-xs text-muted"></span>
+        </div>
+        <div id="history-loading" class="skeleton h-48 w-full"></div>
+        <div id="history-error" class="hidden text-xs text-red-400 mt-2"></div>
+        <div id="history-table-wrap" class="hidden table-wrap">
+          <table class="w-full text-xs">
+            <thead class="bg-panel">
+              <tr class="text-left text-muted border-b border-border">
+                <th class="pb-2 pr-3">Run ID</th>
+                <th class="pb-2 pr-3">Status</th>
+                <th class="pb-2 pr-3">Model</th>
+                <th class="pb-2 pr-3 text-right">Sharpe</th>
+                <th class="pb-2 text-right">Ann. Return</th>
+              </tr>
+            </thead>
+            <tbody id="history-body" class="divide-y divide-border"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ================================================================
+         SCHEDULER STATUS
+    ================================================================ -->
+    <section>
+      <h2 class="text-xs text-muted uppercase tracking-widest mb-3">Scheduler</h2>
+      <div id="scheduler-loading" class="skeleton h-24 w-full rounded-lg"></div>
+      <div id="scheduler-error" class="hidden text-xs text-red-400 mt-2"></div>
+      <div id="scheduler-card" class="hidden bg-panel border border-border rounded-lg p-5">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <p class="text-xs text-muted mb-1">State</p>
+            <p id="sched-state" class="text-sm font-semibold"></p>
+          </div>
+          <div>
+            <p class="text-xs text-muted mb-1">Enabled</p>
+            <p id="sched-enabled" class="text-sm font-semibold"></p>
+          </div>
+          <div>
+            <p class="text-xs text-muted mb-1">Jobs</p>
+            <p id="sched-jobs" class="text-sm font-semibold text-white"></p>
+          </div>
+          <div>
+            <p class="text-xs text-muted mb-1">Next Run</p>
+            <p id="sched-next" class="text-sm font-semibold text-white"></p>
+          </div>
+        </div>
+        <div id="sched-triggers" class="mt-3 space-y-1"></div>
+      </div>
+    </section>
+
+    <!-- ================================================================
+         FOOTER
+    ================================================================ -->
+    <footer class="text-xs text-muted text-center pt-2 pb-6 border-t border-border">
+      Deep Learning Finance API &mdash; <span id="footer-ts"></span>
+    </footer>
+
+  </main>
+
+  <script>
+    // ====================================================================
+    // Config
+    // ====================================================================
+    const BASE = 'https://dlfinance-api.fly.dev';
+
+    const CHART_DEFAULTS = {
+      color: '#6b7280',
+      borderColor: '#2a2d3a',
+      backgroundColor: 'transparent',
+    };
+
+    Chart.defaults.color = '#6b7280';
+    Chart.defaults.font.family = 'ui-monospace, SFMono-Regular, monospace';
+    Chart.defaults.font.size = 11;
+
+    // ====================================================================
+    // Utilities
+    // ====================================================================
+    async function apiFetch(path) {
+      const res = await fetch(BASE + path);
+      if (!res.ok) throw new Error(`HTTP ${res.status} — ${path}`);
+      return res.json();
+    }
+
+    function fmt(n, decimals = 3) {
+      if (n == null || isNaN(n)) return '--';
+      return Number(n).toFixed(decimals);
+    }
+
+    function fmtPct(n) {
+      if (n == null || isNaN(n)) return '--';
+      return (Number(n) * 100).toFixed(2) + '%';
+    }
+
+    function show(id)   { document.getElementById(id).classList.remove('hidden'); }
+    function hide(id)   { document.getElementById(id).classList.add('hidden'); }
+
+    function setLoaded(prefix) {
+      hide(prefix + '-loading');
+      show(prefix + '-chart-wrap') || show(prefix + '-table-wrap') || show(prefix + '-card');
+    }
+
+    function setError(prefix, msg) {
+      hide(prefix + '-loading');
+      const el = document.getElementById(prefix + '-error');
+      if (el) { el.textContent = msg; el.classList.remove('hidden'); }
+    }
+
+    // ====================================================================
+    // 1. Health
+    // ====================================================================
+    async function loadHealth() {
+      try {
+        const data = await apiFetch('/health');
+        const dot  = document.getElementById('status-dot');
+        dot.className = 'status-dot ' + (data.status === 'ok' ? 'status-ok' : 'status-err');
+        document.getElementById('status-text').textContent =
+          data.status === 'ok' ? 'API online' : 'API degraded';
+        document.getElementById('status-text').className =
+          data.status === 'ok' ? 'text-green-400 text-sm' : 'text-red-400 text-sm';
+        document.getElementById('api-version').textContent = 'v' + (data.version || '?');
+        document.getElementById('card-runs').textContent = data.runs_available ?? '--';
+      } catch (e) {
+        const dot = document.getElementById('status-dot');
+        dot.className = 'status-dot status-err';
+        document.getElementById('status-text').textContent = 'API unreachable';
+        document.getElementById('status-text').className = 'text-red-400 text-sm';
+      }
+    }
+
+    // ====================================================================
+    // 2. Assets + Metrics (summary cards)
+    // ====================================================================
+    async function loadSummary() {
+      try {
+        const [assets, metrics] = await Promise.all([
+          apiFetch('/assets'),
+          apiFetch('/metrics/portfolio'),
+        ]);
+        document.getElementById('card-assets').textContent = assets.count ?? '--';
+        document.getElementById('card-sharpe').textContent = fmt(metrics.sharpe, 3);
+        document.getElementById('card-return').textContent = fmtPct(metrics.annualized_return);
+      } catch (e) {
+        // non-fatal: cards stay at --
+      }
+    }
+
+    // ====================================================================
+    // 3. Portfolio Weights — bar chart
+    // ====================================================================
+    async function loadWeights() {
+      try {
+        const data = await apiFetch('/portfolio/weights');
+        document.getElementById('weights-model').textContent = data.model || '';
+
+        const sorted = [...data.weights].sort((a, b) => b.weight - a.weight);
+        const labels  = sorted.map(w => w.ticker.replace('.SA', ''));
+        const values  = sorted.map(w => +(w.weight * 100).toFixed(2));
+
+        hide('weights-loading');
+        show('weights-chart-wrap');
+
+        new Chart(document.getElementById('weights-chart'), {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Weight (%)',
+              data: values,
+              backgroundColor: values.map((_, i) =>
+                `hsl(${210 + i * 12}, 70%, ${45 + i * 2}%)`
+              ),
+              borderRadius: 3,
+              borderSkipped: false,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: ctx => ` ${ctx.parsed.y.toFixed(2)}%`
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { color: '#2a2d3a' },
+                ticks: { color: '#9ca3af' }
+              },
+              y: {
+                grid: { color: '#2a2d3a' },
+                ticks: { color: '#9ca3af', callback: v => v + '%' },
+                beginAtZero: true,
+              }
+            }
+          }
+        });
+      } catch (e) {
+        hide('weights-loading');
+        const el = document.getElementById('weights-error');
+        el.textContent = 'Could not load weights: ' + e.message;
+        el.classList.remove('hidden');
+      }
+    }
+
+    // ====================================================================
+    // 4. Efficient Frontier — scatter/line chart
+    // ====================================================================
+    async function loadFrontier() {
+      try {
+        const data = await apiFetch('/portfolio/frontier?n_points=60');
+
+        const points = data.points.map(p => ({
+          x: +(p.volatility * 100).toFixed(4),
+          y: +(p.expected_return * 100).toFixed(4),
+          sharpe: p.sharpe,
+        }));
+
+        // Highest Sharpe point
+        const best = points.reduce((a, b) => (a.sharpe > b.sharpe ? a : b), points[0]);
+
+        hide('frontier-loading');
+        show('frontier-chart-wrap');
+
+        new Chart(document.getElementById('frontier-chart'), {
+          type: 'scatter',
+          data: {
+            datasets: [
+              {
+                label: 'Frontier',
+                data: points,
+                showLine: true,
+                tension: 0.3,
+                borderColor: '#4f8ef7',
+                backgroundColor: 'rgba(79,142,247,0.06)',
+                borderWidth: 2,
+                pointRadius: 2,
+                pointHoverRadius: 4,
+                fill: true,
+              },
+              {
+                label: 'Max Sharpe',
+                data: [best],
+                pointRadius: 6,
+                pointBackgroundColor: '#22c55e',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 1.5,
+                showLine: false,
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: { color: '#9ca3af', boxWidth: 12, font: { size: 11 } }
+              },
+              tooltip: {
+                callbacks: {
+                  label: ctx => {
+                    const p = ctx.raw;
+                    return [
+                      ` Vol: ${p.x.toFixed(3)}%`,
+                      ` Ret: ${p.y.toFixed(3)}%`,
+                      ` Sharpe: ${(p.sharpe || 0).toFixed(3)}`,
+                    ];
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                title: { display: true, text: 'Volatility (%)', color: '#6b7280' },
+                grid: { color: '#2a2d3a' },
+                ticks: { color: '#9ca3af', callback: v => v + '%' },
+              },
+              y: {
+                title: { display: true, text: 'Expected Return (%)', color: '#6b7280' },
+                grid: { color: '#2a2d3a' },
+                ticks: { color: '#9ca3af', callback: v => v + '%' },
+              }
+            }
+          }
+        });
+      } catch (e) {
+        hide('frontier-loading');
+        const el = document.getElementById('frontier-error');
+        el.textContent = 'Could not load frontier: ' + e.message;
+        el.classList.remove('hidden');
+      }
+    }
+
+    // ====================================================================
+    // 5. Predictions table
+    // ====================================================================
+    async function loadPredictions() {
+      try {
+        const data = await apiFetch('/predictions');
+        document.getElementById('pred-model').textContent = data.model || '';
+
+        const sorted = [...data.predictions].sort(
+          (a, b) => b.predicted_return - a.predicted_return
+        );
+
+        const tbody = document.getElementById('pred-body');
+        tbody.innerHTML = sorted.map((p, i) => {
+          const pct  = fmtPct(p.predicted_return);
+          const pos  = p.predicted_return >= 0;
+          const rank = i === 0 ? ' text-green-400 font-semibold' : (i === sorted.length - 1 ? ' text-red-400' : '');
+          return `
+            <tr class="hover:bg-border/30 transition-colors">
+              <td class="py-2 pr-4 text-white font-medium">${p.ticker.replace('.SA','')}</td>
+              <td class="py-2 pr-4 text-right${rank} ${pos ? 'text-green-300' : 'text-red-300'}">${pct}</td>
+              <td class="py-2 text-right text-muted">${p.model}</td>
+            </tr>`;
+        }).join('');
+
+        hide('pred-loading');
+        show('pred-table-wrap');
+      } catch (e) {
+        hide('pred-loading');
+        const el = document.getElementById('pred-error');
+        el.textContent = 'Could not load predictions: ' + e.message;
+        el.classList.remove('hidden');
+      }
+    }
+
+    // ====================================================================
+    // 6. History table
+    // ====================================================================
+    async function loadHistory() {
+      try {
+        const data = await apiFetch('/history/runs?limit=20');
+        document.getElementById('history-count').textContent =
+          data.count + ' record' + (data.count !== 1 ? 's' : '');
+
+        const STATUS_CLASSES = {
+          completed: 'text-green-400',
+          failed:    'text-red-400',
+          running:   'text-yellow-400',
+        };
+
+        const tbody = document.getElementById('history-body');
+        if (!data.runs || data.runs.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-muted">No runs found.</td></tr>`;
+        } else {
+          tbody.innerHTML = data.runs.map(r => {
+            const sc = STATUS_CLASSES[r.status] || 'text-muted';
+            const ts = r.started_at ? r.started_at.replace('T', ' ').slice(0, 16) : '--';
+            return `
+              <tr class="hover:bg-border/30 transition-colors">
+                <td class="py-2 pr-3 text-muted font-mono text-xs">${ts}</td>
+                <td class="py-2 pr-3 ${sc}">${r.status}</td>
+                <td class="py-2 pr-3 text-white">${r.model || '--'}</td>
+                <td class="py-2 pr-3 text-right text-accent">${r.sharpe != null ? fmt(r.sharpe, 3) : '--'}</td>
+                <td class="py-2 text-right">${r.annualized_return != null ? fmtPct(r.annualized_return) : '--'}</td>
+              </tr>`;
+          }).join('');
+        }
+
+        hide('history-loading');
+        show('history-table-wrap');
+      } catch (e) {
+        hide('history-loading');
+        const el = document.getElementById('history-error');
+        el.textContent = 'Could not load history: ' + e.message;
+        el.classList.remove('hidden');
+      }
+    }
+
+    // ====================================================================
+    // 7. Scheduler status
+    // ====================================================================
+    async function loadScheduler() {
+      try {
+        const data = await apiFetch('/scheduler/status');
+
+        document.getElementById('sched-state').textContent   = data.running ? 'Running' : 'Stopped';
+        document.getElementById('sched-state').className     = 'text-sm font-semibold ' +
+          (data.running ? 'text-green-400' : 'text-red-400');
+        document.getElementById('sched-enabled').textContent = data.enabled ? 'Yes' : 'No';
+        document.getElementById('sched-enabled').className   = 'text-sm font-semibold ' +
+          (data.enabled ? 'text-white' : 'text-muted');
+        document.getElementById('sched-jobs').textContent    = data.job_count;
+
+        const nextRun = data.jobs && data.jobs.length > 0 && data.jobs[0].next_run_time
+          ? data.jobs[0].next_run_time.replace('T', ' ').slice(0, 16)
+          : 'N/A';
+        document.getElementById('sched-next').textContent = nextRun;
+
+        if (data.jobs && data.jobs.length > 0) {
+          document.getElementById('sched-triggers').innerHTML = data.jobs.map(j => `
+            <div class="text-xs text-muted">
+              <span class="text-white">${j.id}</span>
+              &mdash; ${j.trigger}
+            </div>`).join('');
+        }
+
+        hide('scheduler-loading');
+        show('scheduler-card');
+      } catch (e) {
+        hide('scheduler-loading');
+        const el = document.getElementById('scheduler-error');
+        el.textContent = 'Could not load scheduler status: ' + e.message;
+        el.classList.remove('hidden');
+      }
+    }
+
+    // ====================================================================
+    // Bootstrap
+    // ====================================================================
+    document.getElementById('footer-ts').textContent =
+      'Last loaded: ' + new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+
+    Promise.all([
+      loadHealth(),
+      loadSummary(),
+      loadWeights(),
+      loadFrontier(),
+      loadPredictions(),
+      loadHistory(),
+      loadScheduler(),
+    ]);
+  </script>
+</body>
+</html>

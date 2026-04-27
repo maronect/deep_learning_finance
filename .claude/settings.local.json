@@ -14,7 +14,10 @@
       "Bash(curl -s http://localhost:8000/assets)",
       "Bash(curl -s http://localhost:8000/pipeline/stages)",
       "Bash(kill %1)",
-      "Bash(ruff check *)"
+      "Bash(ruff check *)",
+      "Bash(chmod +x /home/maron/projetcs/deep_learning_finance/test_dashboard.sh)",
+      "Bash(bash -n /home/maron/projetcs/deep_learning_finance/test_dashboard.sh)",
+      "Bash(flyctl deploy *)"
     ]
   }
 }

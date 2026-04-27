@@ -1,4 +1,10 @@
 ## FastAPI serving configuration
+#
+# Environment variable overrides (take precedence over values below):
+#   CORS_ORIGINS  Comma-separated allowed origins. Overrides cors.allow_origins.
+#                 Example: CORS_ORIGINS="https://dlfinance-api.fly.dev"
+#   API_VERSION   Version string. Overrides docs.version. Shown in GET /health
+#                 and the OpenAPI schema. Example: API_VERSION="1.2.0"
 
 server:
   host: "0.0.0.0"
@@ -6,13 +12,13 @@ server:
   reload: false           # Set to true in development
 
 cors:
-  allow_origins: ["*"]    # Restrict in production
+  allow_origins: ["*"]    # Override at runtime with CORS_ORIGINS env var
   allow_methods: ["GET", "POST"]
   allow_headers: ["*"]
 
 docs:
   title: "Deep Learning Finance API"
   description: "Portfolio optimization and ML return prediction service"
-  version: "0.1.0"
+  version: "0.1.0"        # Override at runtime with API_VERSION env var
   swagger_url: "/docs"
   redoc_url: "/redoc"

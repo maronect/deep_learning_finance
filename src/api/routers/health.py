@@ -5,6 +5,8 @@ Returns application liveness and readiness status.
 """
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter
 
 from src.api.schemas.responses import HealthResponse
@@ -22,7 +24,7 @@ def health_check() -> HealthResponse:
     completed pipeline runs are stored in the artifact registry.
     """
     api_cfg = get_config("api")
-    version: str = api_cfg.get("docs", {}).get("version", "0.1.0")
+    version: str = os.environ.get("API_VERSION") or api_cfg.get("docs", {}).get("version", "0.1.0")
 
     df = list_runs()
     n_runs = 0 if df.empty else int((df["status"] == "completed").sum())

@@ -26,6 +26,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 # --- Application source and configuration ---
 COPY src/ ./src/
 COPY config/ ./config/
+COPY dashboard.html ./dashboard.html
 
 # --- Entrypoint script (creates artifact subdirs inside mounted volume) ---
 COPY entrypoint.sh ./entrypoint.sh
