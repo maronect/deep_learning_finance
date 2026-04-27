@@ -12,6 +12,7 @@ requires-python = ">=3.10"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
