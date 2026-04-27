@@ -27,17 +27,13 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY src/ ./src/
 COPY config/ ./config/
 
-# --- Artifact directories (populated at runtime via volume mount) ---
-RUN mkdir -p \
-    artifacts/data \
-    artifacts/models \
-    artifacts/predictions \
-    artifacts/metrics \
-    artifacts/weights \
-    artifacts/runs
+# --- Entrypoint script (creates artifact subdirs inside mounted volume) ---
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 # --- API port ---
 EXPOSE 8000
 
-# --- Default entrypoint: start the FastAPI server ---
+# --- Startup: init artifact dirs then launch uvicorn ---
+ENTRYPOINT ["./entrypoint.sh"]
 CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

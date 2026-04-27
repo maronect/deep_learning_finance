@@ -1,218 +1,313 @@
-# Deep Sequential Models for Finance
+# Deep Learning Finance
 
-Projeto de pesquisa que explora a aplicação de modelos de aprendizado de máquina na otimização de portfólios financeiros, comparando abordagens clássicas com métodos modernos de previsão de retornos.
-
-## Sobre o Projeto
-
-Este projeto implementa e compara três abordagens distintas para otimização de portfólios utilizando a teoria de Markowitz:
-
-1. **Markowitz Clássico**: Utiliza médias históricas simples para estimar retornos esperados
-2. **Markowitz + Regressão Linear**: Emprega Regressão Linear Ridge com validação walk-forward para prever retornos
-3. **Markowitz + MLP**: Utiliza Multi-Layer Perceptron (MLP) com arquitetura de 2 camadas para previsão de retornos
-
-O objetivo é avaliar se modelos de aprendizado de máquina podem melhorar as estimativas de retornos esperados (μ) e, consequentemente, gerar portfólios com melhor desempenho ajustado ao risco.
-
-## [X] O que foi Implementado
-
-### Modelos e Otimização
-
-- [X] **Otimização de Portfólios com Markowitz**: Implementação completa da teoria moderna de portfólios
-- [X] **Regressão Linear (Ridge)**: Modelo de previsão com regularização L2 e validação walk-forward
-- [X] **Multi-Layer Perceptron (MLP)**: Rede neural com 2 camadas ocultas (50 neurônios cada) para previsão de retornos
-- [X] **Otimização por Máximo Sharpe Ratio**: Seleção de portfólios otimizados para melhor relação risco-retorno
-
-### Funcionalidades Principais
-
-- [X] **Seleção Automática de Ativos**: Algoritmo que seleciona ativos com baixa correlação e padrões estáveis
-- [X] **Validação Walk-Forward**: Metodologia que evita data leakage, usando apenas dados históricos para previsões
-- [X] **Blending de Previsões**: Combinação de previsões de ML com médias históricas (α = 0.3)
-- [X] **Cálculo de Métricas Financeiras**: Sharpe Ratio, retorno anualizado, volatilidade anualizada e retorno acumulado
-- [X] **Geração de Fronteiras Eficientes**: Visualização comparativa das fronteiras eficientes para cada modelo
-
-### Visualizações e Exportação
-
-- [X] **Gráficos Comparativos**: 5 visualizações (fronteiras eficientes, séries temporais, heatmaps, histogramas, comparação de Sharpe)
-- [X] **Exportação de Resultados**: Métricas, pesos dos portfólios e previsões exportados em CSV
-- [X] **Tabelas Formatadas**: Tabelas prontas para inclusão em artigos científicos
-
-### Estrutura de Código
-
-- [X] **Código Modular**: Organização em módulos reutilizáveis (`src/data`, `src/models`, `src/optimization`, `src/utils`)
-- [X] **Notebook Comparativo**: Notebook principal (`00-compare_models.ipynb`) que executa toda a pipeline
-- [X] **Documentação Completa**: Documentação detalhada da implementação e metodologia
-
-## Resultados Observados
-
-Com base na análise de 10 ações brasileiras no período de 2010-2025, os resultados obtidos foram:
-
-| Modelo | Sharpe Ratio | Retorno Anual | Volatilidade Anual | Retorno Acumulado |
-|--------|--------------|---------------|-------------------|-------------------|
-| Markowitz Clássico | 0.5432 | 33.16% | 27.48% | 4.41x |
-| **Markowitz + Regressão Linear** | **0.5911** | **35.73%** | 28.56% | **4.86x** |
-| Markowitz + MLP | 0.5718 | 34.33% | 27.66% | 4.63x |
-
-## Estrutura do Projeto
-
-```
-deep_learning_finance/
-├── config/                          # YAML configuration — no hardcoded parameters
-│   ├── pipeline.yaml                # Global pipeline parameters (assets, frequency, windows)
-│   ├── models.yaml                  # ML model hyperparameters (Ridge α, MLP layers, etc.)
-│   ├── optimization.yaml            # Markowitz parameters (risk-free rate, solver, bounds)
-│   └── api.yaml                     # FastAPI server settings (host, port, CORS)
-│
-├── src/
-│   ├── ingestion/                   # Stage 1: download and validate raw market data
-│   │   ├── downloader.py            # Fetch OHLCV prices from yfinance
-│   │   └── validators.py            # Check data completeness and integrity
-│   ├── features/                    # Stage 2: feature engineering
-│   │   ├── returns.py               # Compute returns at multiple frequencies
-│   │   ├── asset_selection.py       # Select uncorrelated assets (4 strategies)
-│   │   └── lag_features.py          # Build lag feature matrices for supervised learning
-│   ├── models/                      # Stage 3: ML model training and prediction
-│   │   ├── base.py                  # Abstract interface shared by all models
-│   │   ├── ridge.py                 # Ridge Regression with walk-forward validation
-│   │   ├── mlp.py                   # MLP with walk-forward validation
-│   │   ├── rnn.py                   # LSTM/RNN (PyTorch) — implemented, not yet integrated
-│   │   └── blending.py              # Blend ML predictions with historical mean
-│   ├── optimization/                # Stage 4: portfolio optimization
-│   │   ├── markowitz.py             # Markowitz formulation (return, covariance, constraints)
-│   │   ├── sharpe.py                # Maximize Sharpe Ratio via SLSQP
-│   │   └── evaluation.py            # Portfolio metrics (Sharpe, return, volatility, frontier)
-│   ├── pipeline/                    # Orchestration: full or partial pipeline execution
-│   │   ├── runner.py                # Entry point — runs all or selected stages
-│   │   ├── stages.py                # Each pipeline stage as an independent function
-│   │   └── context.py               # Shared state object passed between stages
-│   ├── api/                         # FastAPI serving layer (Stage 3 of roadmap)
-│   │   ├── main.py                  # App factory: middleware, routers, startup
-│   │   ├── routers/
-│   │   │   ├── health.py            # GET /health
-│   │   │   ├── assets.py            # GET /assets
-│   │   │   ├── predictions.py       # GET /predictions
-│   │   │   ├── pipeline.py          # POST /pipeline/run
-│   │   │   ├── portfolio.py         # GET /portfolio/weights, /portfolio/frontier
-│   │   │   └── metrics.py           # GET /metrics/model, /metrics/portfolio
-│   │   └── schemas/
-│   │       ├── requests.py          # Pydantic input schemas
-│   │       └── responses.py         # Pydantic output schemas
-│   └── utils/
-│       ├── config_loader.py         # Load and merge YAML configs
-│       ├── visualization.py         # Comparative charts (matplotlib/seaborn)
-│       └── export.py                # Persist artifacts to disk
-│
-├── artifacts/                       # Pipeline outputs (not committed to git)
-│   ├── data/                        # Processed returns and feature datasets
-│   ├── models/                      # Trained model parameters
-│   ├── predictions/                 # Expected return predictions per run
-│   ├── metrics/                     # Model and portfolio evaluation metrics
-│   ├── weights/                     # Optimized portfolio weights
-│   └── runs/                        # Execution logs (timestamp, config, status)
-│
-├── tests/
-│   ├── conftest.py                  # Shared fixtures (synthetic data, mock configs)
-│   ├── unit/                        # Fast, isolated function-level tests
-│   │   ├── test_returns.py
-│   │   ├── test_features.py
-│   │   ├── test_markowitz.py
-│   │   └── test_sharpe.py
-│   └── integration/                 # End-to-end tests across multiple components
-│       ├── test_pipeline.py
-│       └── test_api.py
-│
-├── notebooks/                       # Exploratory analysis (not part of the pipeline)
-│   ├── 00-compare_models.ipynb      # Legacy main pipeline — reference results
-│   ├── 01-markowitz_optimization.ipynb
-│   └── 02-linear_regretion.ipynb
-│
-├── article_official/
-│   └── article.tex                  # Academic article in LaTeX
-│
-├── .github/workflows/ci.yml         # CI: test + Docker build on push/PR
-├── Dockerfile                        # Production image (API + pipeline)
-├── docker-compose.yml               # Local orchestration: API service
-├── pyproject.toml                   # Project metadata, pytest and ruff config
-├── requirements.txt                 # Production dependencies
-├── requirements-dev.txt             # Development and testing dependencies
-└── README.md
-```
-
-## Como Usar
-
-### Pré-requisitos
-
-```bash
-pip install -r requirements.txt
-```
-
-### Executar o Notebook Comparativo
-
-```bash
-cd notebooks
-jupyter notebook 00-compare_models.ipynb
-```
-
-Execute todas as células em ordem. O notebook irá:
-- Carregar dados históricos automaticamente
-- Treinar os modelos com validação walk-forward
-- Gerar todos os gráficos comparativos
-- Exportar resultados em CSV
-
-### Resultados Gerados
-
-Após a execução, você encontrará em `outputs/`:
-
-- **5 Gráficos PNG**: Fronteiras eficientes, séries temporais, heatmaps, histogramas e comparação de Sharpe
-- **Múltiplos CSVs**: Métricas dos portfólios, pesos otimizados e previsões de retornos
-- **Tabelas Formatadas**: Prontas para inclusão em artigos científicos
-
-## Metodologia
-
-### Dados
-
-- **Período**: 2010-2025 (15 anos de dados históricos)
-- **Frequência**: Retornos mensais calculados a partir de preços diários
-- **Ativos**: 10 ações brasileiras selecionadas automaticamente por baixa correlação
-- **Fonte**: Dados históricos obtidos via `yfinance`
-
-### Modelos de Previsão
-
-- **Janela de Features**: 24 meses de retornos históricos
-- **Validação Walk-Forward**: Re-treinamento mensal usando apenas dados históricos
-- **Blending**: Combinação de previsões ML com média histórica (α = 0.3)
-
-### Otimização
-
-- **Critério**: Máximo Sharpe Ratio
-- **Taxa Livre de Risco**: 15% ao ano (Selic 2025)
-- **Matriz de Covariância**: Estimada a partir de retornos históricos
-
-## Objetivos do Projeto
-
-Este projeto foi desenvolvido para:
-
-- **Educação**: Aprender e aplicar conceitos de otimização de portfólios e aprendizado de máquina
-- **Pesquisa**: Investigar se modelos ML podem melhorar estimativas de retornos esperados
-- **Portfólio**: Demonstrar habilidades em análise quantitativa e desenvolvimento de sistemas financeiros
-
-## Status do Projeto
-
-- [X] **Implementação Completa**: Todos os modelos e funcionalidades implementados
-- [X] **Validação e Correções**: Problemas identificados e corrigidos (otimização por máximo Sharpe)
-- [X] **Resultados Documentados**: Análise completa dos resultados com interpretação crítica
-- [X] **Artigo Científico**: Artigo LaTeX completo com metodologia e discussão dos resultados
-
-## Trabalhos Futuros
-
-- [ ] Implementação de RNN para previsão de retornos
-- [ ] Implementação de LSTM e BiLSTM
-- [ ] GANs para geração de cenários sintéticos
-- [ ] Expansão para outros mercados e períodos
-- [ ] Implementação de restrições de diversificação mais sofisticadas
-
-## Licença
-
-Ver arquivo `LICENSE` para detalhes.
+A Machine Learning Engineering application for portfolio optimization on Brazilian stocks (B3).
+The system collects financial data, trains ML models to predict expected returns, optimizes portfolios
+using the Markowitz framework, and exposes results through a REST API — running as a continuously
+updated, containerized, deployed service.
 
 ---
 
-**Nota**: Este projeto é de natureza educacional e de pesquisa. Os resultados não constituem recomendações de investimento.
+## Results
+
+Backtested on 10 Brazilian equities (B3), monthly frequency, 2010–2025:
+
+| Strategy | Sharpe Ratio | Annualized Return | Annualized Volatility | Cumulative Return |
+|---|---|---|---|---|
+| Classic Markowitz | 0.543 | 33.16% | 27.48% | 4.41x |
+| **Markowitz + Ridge Regression** | **0.591** | **35.73%** | 28.56% | **4.86x** |
+| Markowitz + MLP | 0.572 | 34.33% | 27.66% | 4.63x |
+
+Ridge Regression improves Sharpe by ~9% over the classic baseline. Blending ML predictions
+conservatively (alpha = 0.3) keeps the benefit while limiting overfitting risk.
+
+---
+
+## Architecture
+
+```
+config/pipeline.yaml              # single source of truth for all parameters
+        |
+        v
+src/ingestion/                    # download + validate prices (yfinance)
+        |
+        v
+src/features/                     # returns, asset selection, lag feature matrix
+        |
+        v
+src/models/                       # Ridge / MLP walk-forward training + blending
+        |
+        v
+src/optimization/                 # Markowitz + max-Sharpe (SLSQP)
+        |
+        v
+artifacts/                        # persisted outputs (data, models, weights, metrics)
+        |
+        v
+src/persistence/                  # SQLite run history
+        |
+        v
+src/api/                          # FastAPI — exposes all results as REST endpoints
+        |
+        v
+src/scheduler/                    # APScheduler — periodic retraining
+```
+
+The pipeline can be run end-to-end or stage by stage. Every parameter (tickers, dates, model
+hyperparameters, risk-free rate) is defined in `config/*.yaml` — no hardcoded values in source.
+
+---
+
+## API Endpoints
+
+The API is deployed at `https://dlfinance-api.fly.dev`. Interactive docs: `/docs` (Swagger), `/redoc`.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/health` | Liveness check |
+| GET | `/assets` | List assets used in the latest run |
+| GET | `/predictions` | Expected return predictions per asset |
+| POST | `/pipeline/run` | Trigger a full or partial pipeline run |
+| GET | `/pipeline/runs` | List all pipeline runs |
+| GET | `/pipeline/runs/{run_id}` | Single run manifest |
+| GET | `/pipeline/stages` | Available pipeline stages |
+| GET | `/portfolio/weights` | Optimized portfolio weights |
+| GET | `/portfolio/frontier` | Efficient frontier data points |
+| GET | `/metrics/portfolio` | Sharpe, return, volatility, cumulative return |
+| GET | `/metrics/model` | Model evaluation metrics (MAE, R²) |
+| GET | `/history/runs` | DB-backed run list (filterable by status) |
+| GET | `/history/runs/{run_id}` | Single run from DB |
+| GET | `/history/runs/compare` | Side-by-side comparison of multiple runs |
+| POST | `/history/sync` | Rebuild DB from manifest files |
+| GET | `/scheduler/status` | Scheduler state and next run time |
+| POST | `/scheduler/trigger` | Manual one-shot pipeline trigger |
+| GET | `/scheduler/logs` | List execution log files |
+| GET | `/scheduler/logs/{run_id}` | Full log for a specific run |
+
+---
+
+## ML Methodology
+
+### Data
+
+- **Source**: yfinance (B3 tickers)
+- **Period**: 2010–2025 (15 years)
+- **Frequency**: monthly returns computed from adjusted closing prices
+- **Asset selection**: `stable_corr_pairs` — selects the N assets with the most stable
+  pairwise correlations over time, reducing covariance estimation noise
+
+### Feature Engineering
+
+- **Lag features**: returns at lags t-1 through t-24 (configurable via `features.lag_window`)
+- **Walk-forward splits**: training window expands month by month — no data leakage
+
+### Models
+
+- **Ridge Regression** (`src/models/ridge.py`): L2-regularized linear model, alpha from `config/models.yaml`
+- **MLP** (`src/models/mlp.py`): two-hidden-layer neural network (sklearn), walk-forward retrained
+- **Blending** (`src/models/blending.py`): `final_mu = alpha * ml_pred + (1 - alpha) * hist_mean`
+  with default alpha = 0.3 — conservative weight keeps ML signal without full exposure to overfitting
+
+### Portfolio Optimization
+
+- **Formulation**: Markowitz mean-variance with no short selling (weights in [0, 1], sum to 1)
+- **Objective**: maximize Sharpe Ratio — `(mu_p - rf) / sigma_p`
+- **Solver**: SLSQP via `scipy.optimize.minimize`
+- **Risk-free rate**: 15% p.a. (SELIC 2025), converted to the pipeline frequency
+
+---
+
+## Project Structure
+
+```
+deep_learning_finance/
+|
++-- config/
+|   +-- pipeline.yaml         # data dates, tickers, asset selection, features, optimization
+|   +-- models.yaml           # Ridge alpha, MLP layers/neurons
+|   +-- optimization.yaml     # solver, risk-free rate, frontier points
+|   +-- api.yaml              # FastAPI host/port, CORS, Swagger metadata
+|   +-- scheduler.yaml        # APScheduler trigger, interval, cron
+|
++-- src/
+|   +-- ingestion/            # download and validate raw market data
+|   |   +-- downloader.py     # load_prices() via yfinance
+|   |   +-- validators.py     # coverage checks, forward-fill, integrity assertions
+|   |
+|   +-- features/             # feature engineering
+|   |   +-- returns.py        # compute_returns(), ajustar_risk_free(), converter_periodo()
+|   |   +-- asset_selection.py# select_assets() with 4 strategies
+|   |   +-- lag_features.py   # build_lag_features(), make_walk_forward_splits()
+|   |
+|   +-- models/               # ML model training and prediction
+|   |   +-- base.py           # BaseReturnModel ABC
+|   |   +-- ridge.py          # RidgeReturnModel — walk-forward Ridge
+|   |   +-- mlp.py            # MLPReturnModel — walk-forward MLP
+|   |   +-- blending.py       # blend_predictions(), blend_from_config()
+|   |
+|   +-- optimization/         # portfolio optimization
+|   |   +-- markowitz.py      # portfolio_return(), portfolio_volatility(), solve_markowitz()
+|   |   +-- sharpe.py         # maximize_sharpe()
+|   |   +-- evaluation.py     # portfolio metrics + efficient frontier
+|   |
+|   +-- pipeline/             # orchestration
+|   |   +-- runner.py         # run_pipeline(), STAGE_REGISTRY, STAGE_ORDER
+|   |   +-- stages.py         # 8 stage functions: ingest -> export
+|   |   +-- context.py        # PipelineContext dataclass (shared state)
+|   |   +-- registry.py       # list_runs(), load_run_manifest(), compare_runs()
+|   |
+|   +-- api/                  # FastAPI serving layer
+|   |   +-- main.py           # app factory, lifespan, CORS, router registration
+|   |   +-- deps.py           # shared helpers: resolve_run(), artifact path resolvers
+|   |   +-- routers/          # one file per resource group
+|   |   +-- schemas/          # Pydantic request and response models
+|   |
+|   +-- persistence/          # SQLite run history
+|   |   +-- database.py       # init_db(), upsert_run(), get_run(), list_runs(), sync_from_manifests()
+|   |
+|   +-- scheduler/            # periodic retraining
+|   |   +-- jobs.py           # run_scheduled_pipeline() — generates run_id, writes log
+|   |   +-- scheduler.py      # build_scheduler(), get_scheduler() (APScheduler)
+|   |
+|   +-- utils/
+|       +-- config_loader.py  # get_config(name) — loads config/<name>.yaml
+|       +-- export.py         # save/load artifacts (models, CSVs)
+|
++-- artifacts/                # pipeline outputs (not committed to git)
+|   +-- data/                 # processed returns and feature datasets
+|   +-- models/               # serialized model parameters (.joblib)
+|   +-- predictions/          # expected return vectors per run
+|   +-- metrics/              # model (MAE, R2) and portfolio metrics
+|   +-- weights/              # optimized portfolio weights
+|   +-- runs/                 # run manifests (JSON): config snapshot + metrics + status
+|   +-- logs/                 # scheduler execution logs
+|
++-- tests/
+|   +-- conftest.py           # shared fixtures: price_df, pipeline_cfg, minimal_context
+|   +-- smoke_test_data_layer.py  # 22 assert-based smoke tests (no pytest)
+|   +-- unit/                 # pytest unit tests per module (61 tests)
+|   +-- integration/          # end-to-end API and pipeline tests (71 tests)
+|
++-- notebooks/                # exploratory analysis — legacy, not part of the pipeline
+|
++-- .github/workflows/ci.yml  # CI/CD: lint -> test -> docker build -> deploy to Fly.io
++-- Dockerfile                # python:3.10-slim, requirements-api.txt only
++-- docker-compose.yml        # local orchestration: API on :8000
++-- fly.toml                  # Fly.io deployment: region gru, persistent volume, health check
++-- pyproject.toml            # project metadata, pytest config, ruff config
++-- requirements-api.txt      # lean runtime deps (no torch/matplotlib)
++-- requirements-dev.txt      # pytest, httpx, ruff
+```
+
+---
+
+## Local Execution
+
+### Prerequisites
+
+```bash
+pip install -r requirements.txt   # full deps including torch and matplotlib
+# or
+pip install -r requirements-api.txt  # API + pipeline only (no notebooks)
+```
+
+### Run the pipeline
+
+```bash
+python -m src.pipeline.runner
+```
+
+### Run the API
+
+```bash
+uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Docker (recommended for API)
+
+```bash
+docker compose up        # starts API on :8000
+docker build -t dl-finance .
+```
+
+### Tests
+
+```bash
+python tests/smoke_test_data_layer.py   # 22 smoke tests, no pytest
+pytest tests/unit/ -v                   # 61 unit tests
+pytest tests/integration/ -v           # 71 integration tests
+```
+
+---
+
+## Deployment
+
+The application is deployed on [Fly.io](https://fly.io) — region `gru` (São Paulo).
+
+- **App**: `dlfinance-api`
+- **Persistent volume**: `/app/artifacts` mounted as `dl_artifacts` — pipeline outputs survive deploys
+- **Health check**: `GET /health` every 30 seconds
+- **HTTPS**: enforced by Fly.io
+- **Auto-deploy**: every push to `main` triggers the CI pipeline (lint → test → docker → deploy)
+
+Manual deploy:
+
+```bash
+fly deploy
+```
+
+---
+
+## CI/CD Pipeline
+
+Every push or pull request to `main` or `dev` runs:
+
+1. **Lint** — `ruff check src/ tests/`
+2. **Test** — smoke + unit + integration on Python 3.10 and 3.11
+3. **Docker build** — verifies the image builds cleanly (push events only)
+4. **Deploy** — `flyctl deploy --remote-only` (push to `main` only, requires `FLY_API_TOKEN` secret)
+
+---
+
+## Technology Stack
+
+| Layer | Technology |
+|---|---|
+| Language | Python 3.10+ |
+| Data source | yfinance |
+| ML models | scikit-learn (Ridge, MLP) |
+| Optimization | scipy (SLSQP) |
+| API framework | FastAPI + Uvicorn |
+| Schema validation | Pydantic v2 |
+| Persistence | SQLite (via stdlib `sqlite3`) |
+| Scheduling | APScheduler 3.x |
+| Containerization | Docker |
+| CI/CD | GitHub Actions |
+| Deployment | Fly.io |
+| Linting | Ruff |
+| Testing | pytest + httpx |
+
+---
+
+## MLOps Practices Demonstrated
+
+- **Reproducibility**: all parameters in `config/*.yaml`, no hardcoded values in source
+- **Artifact traceability**: every run writes a manifest JSON with config snapshot, metrics, and status
+- **Run history**: SQLite layer enables cross-run comparison without reading raw files
+- **Walk-forward validation**: strict temporal split at every training step — no data leakage
+- **Automated retraining**: APScheduler triggers the full pipeline on a configurable interval
+- **CI/CD**: lint + test + build + deploy on every push to main
+- **Containerization**: lean Docker image (~200 MB) excluding notebook and research deps
+- **Persistent storage**: Fly.io volume ensures artifacts survive container restarts and deploys
+
+---
+
+## Academic Background
+
+This project originated as a quantitative research study comparing three portfolio optimization
+strategies on Brazilian stocks. The research results are documented in `article_official/article.tex`.
+The codebase was subsequently refactored and extended into a production ML Engineering application
+following the ten-stage roadmap in `ROADMAP.md`.
+
+---
+
+*Educational and research project. Results do not constitute investment advice.*

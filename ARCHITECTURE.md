@@ -4,202 +4,252 @@ Technical map of the repository. See CLAUDE.md for conventions and ROADMAP.md fo
 
 ---
 
+## Data Flow
+
+```
+config/pipeline.yaml
+        |
+        v
+run_data_ingestion()              [src/ingestion/__init__.py]
+  +-- load_prices()               [src/ingestion/downloader.py]      -> yfinance
+  +-- validate / fill             [src/ingestion/validators.py]
+  +-- compute_returns()           [src/features/returns.py]
+  +-- select_assets()             [src/features/asset_selection.py]
+        |
+        v
+PipelineContext                   [src/pipeline/context.py]
+  +-- build_lag_features()        [src/features/lag_features.py]
+  +-- make_walk_forward_splits()  [src/features/lag_features.py]
+  +-- train() / predict()         [src/models/ridge.py | mlp.py]
+  +-- blend_predictions()         [src/models/blending.py]
+  +-- solve_markowitz()           [src/optimization/markowitz.py]
+  +-- maximize_sharpe()           [src/optimization/sharpe.py]
+  +-- evaluate()                  [src/optimization/evaluation.py]
+        |
+        v
+artifacts/                        [src/utils/export.py]
+  +-- data/*.csv
+  +-- models/*.joblib
+  +-- predictions/*.csv
+  +-- metrics/*.csv
+  +-- weights/*.csv
+  +-- runs/*.json (manifest)
+        |
+        v
+src/persistence/database.py       upsert_run() -> artifacts/pipeline_runs.db
+        |
+        v
+src/api/                          FastAPI (uvicorn)
+  GET  /health
+  GET  /assets
+  GET  /predictions
+  POST /pipeline/run
+  GET  /pipeline/runs
+  GET  /portfolio/weights
+  GET  /portfolio/frontier
+  GET  /metrics/portfolio
+  GET  /metrics/model
+  GET  /history/runs
+  GET  /scheduler/status
+  POST /scheduler/trigger
+```
+
+---
+
+## Module Map
+
+| Module | Status | Responsibility |
+|---|---|---|
+| `src/ingestion/__init__.py` | Implemented | `DataLayerResult` dataclass + `run_data_ingestion()` entry point |
+| `src/ingestion/downloader.py` | Implemented | `load_prices()`, `load_prices_from_config()` via yfinance |
+| `src/ingestion/validators.py` | Implemented | `drop_empty_rows()`, `filter_by_coverage()`, `fill_missing_prices()`, `validate_not_empty()` |
+| `src/features/returns.py` | Implemented | `compute_returns()`, `ajustar_risk_free()`, `converter_periodo()` |
+| `src/features/asset_selection.py` | Implemented | `select_assets()` with 4 strategies + `get_correlation_matrix()` |
+| `src/features/lag_features.py` | Implemented | `build_lag_features()`, `make_walk_forward_splits()` |
+| `src/models/base.py` | Implemented | `BaseReturnModel` ABC — shared interface for all models |
+| `src/models/ridge.py` | Implemented | `RidgeReturnModel` — walk-forward Ridge Regression |
+| `src/models/mlp.py` | Implemented | `MLPReturnModel` — walk-forward MLP (sklearn) |
+| `src/models/blending.py` | Implemented | `blend_predictions()`, `blend_from_config()` |
+| `src/optimization/markowitz.py` | Implemented | `portfolio_return()`, `portfolio_volatility()`, `solve_markowitz()` |
+| `src/optimization/sharpe.py` | Implemented | `maximize_sharpe()` via SLSQP |
+| `src/optimization/evaluation.py` | Implemented | portfolio metrics, efficient frontier computation |
+| `src/pipeline/context.py` | Implemented | `PipelineContext` dataclass — shared state between stages |
+| `src/pipeline/stages.py` | Implemented | 8 stage functions: ingest -> returns -> select -> features -> train -> predict -> optimize -> export |
+| `src/pipeline/runner.py` | Implemented | `run_pipeline()`, `STAGE_REGISTRY`, `STAGE_ORDER` |
+| `src/pipeline/registry.py` | Implemented | `list_runs()`, `load_run_manifest()`, `compare_runs()` |
+| `src/persistence/database.py` | Implemented | `init_db()`, `upsert_run()`, `get_run()`, `list_runs()`, `sync_from_manifests()` |
+| `src/api/main.py` | Implemented | FastAPI factory, lifespan, CORS, router registration |
+| `src/api/deps.py` | Implemented | `resolve_run()`, artifact path resolvers |
+| `src/api/routers/` | Implemented | health, assets, predictions, pipeline, portfolio, metrics, history, scheduler |
+| `src/api/schemas/` | Implemented | Pydantic request and response models |
+| `src/scheduler/jobs.py` | Implemented | `run_scheduled_pipeline()` — timestamped run_id, per-run log file |
+| `src/scheduler/scheduler.py` | Implemented | `build_scheduler()`, `get_scheduler()` — APScheduler singleton |
+| `src/utils/config_loader.py` | Implemented | `get_config(name)` — loads `config/<name>.yaml` |
+| `src/utils/export.py` | Implemented | `save_returns()`, `save_features()`, `save_model()`, `load_model()` |
+| `src/data/` | Legacy | Kept for notebook compatibility — do not import in new code |
+| `src/models/lr.py` | Legacy | Original Ridge + MLP — used by notebooks only |
+| `src/models/rnn.py` | Legacy | LSTM/RNN (PyTorch) — not integrated into the pipeline |
+
+---
+
 ## Directory Tree
 
 ```
 deep_learning_finance/
-│
-├── config/                              # YAML config — single source of truth for all parameters
-│   ├── pipeline.yaml                    # data dates/tickers, asset selection, features, optimization, artifacts
-│   ├── models.yaml                      # ML hyperparameters: Ridge α, MLP layers/neurons, RNN hidden size
-│   ├── optimization.yaml                # Markowitz solver settings, risk-free rate, frontier points
-│   └── api.yaml                         # FastAPI host/port, CORS, Swagger metadata
-│
-├── src/
-│   │
-│   ├── ingestion/                       # [X] IMPLEMENTED — Stage 1
-│   │   ├── __init__.py                  # DataLayerResult dataclass + run_data_ingestion() entry point
-│   │   ├── downloader.py                # load_prices(), load_prices_from_config() via yfinance
-│   │   └── validators.py                # drop_empty_rows(), filter_by_coverage(), fill_missing_prices(), validate_not_empty()
-│   │
-│   ├── features/                        # [X] IMPLEMENTED — Stage 1 (lag_features stub)
-│   │   ├── __init__.py
-│   │   ├── returns.py                   # compute_returns(), ajustar_risk_free(), converter_periodo()
-│   │   ├── asset_selection.py           # 4 strategies + select_assets() + select_assets_from_config() + get_correlation_matrix()
-│   │   └── lag_features.py              # [ ] STUB — walk-forward lag matrix builder (next: Stage 2)
-│   │
-│   ├── models/                          # [ ] STUBS — to be implemented in Stage 2
-│   │   ├── base.py                      # Abstract base class / interface for all models
-│   │   ├── ridge.py                     # Ridge Regression wrapper (config-driven, walk-forward)
-│   │   ├── mlp.py                       # MLP wrapper (config-driven, walk-forward)
-│   │   ├── blending.py                  # final_mu = alpha * ml + (1-alpha) * hist_mean
-│   │   ├── lr.py                        # ! LEGACY ! — original Ridge + MLP, used by notebooks
-│   │   └── rnn.py                       # ! LEGACY ! — LSTM/RNN (PyTorch), not yet integrated
-│   │
-│   ├── optimization/                    # ! LEGACY ! — not yet refactored to new conventions
-│   │   ├── markowitz.py                 # Markowitz formulation: μ, Σ, SLSQP constraints
-│   │   ├── sharpe.py                    # Maximize Sharpe Ratio: max (μ_p - rf) / σ_p
-│   │   └── evaluation.py               # Sharpe, annualized return, volatility, cumulative return
-│   │
-│   ├── pipeline/                        # [ ] STUBS — to be implemented in Stage 2
-│   │   ├── __init__.py
-│   │   ├── runner.py                    # Entry point: run all or selected stages
-│   │   ├── stages.py                    # ingest → returns → select → features → train → predict → optimize → evaluate → export
-│   │   └── context.py                   # PipelineContext dataclass: carries config + intermediate state
-│   │
-│   ├── api/                             # [ ] STUBS — to be implemented in Stage 3
-│   │   ├── __init__.py
-│   │   ├── main.py                      # FastAPI app factory, CORS middleware, router registration
-│   │   ├── routers/
-│   │   │   ├── health.py                # GET /health
-│   │   │   ├── assets.py                # GET /assets
-│   │   │   ├── predictions.py           # GET /predictions
-│   │   │   ├── pipeline.py              # POST /pipeline/run
-│   │   │   ├── portfolio.py             # GET /portfolio/weights  GET /portfolio/frontier
-│   │   │   └── metrics.py              # GET /metrics/model  GET /metrics/portfolio
-│   │   └── schemas/
-│   │       ├── requests.py              # Pydantic input schemas
-│   │       └── responses.py             # Pydantic output schemas
-│   │
-│   └── utils/
-│       ├── __init__.py
-│       ├── config_loader.py             # [X] get_config(name) — loads config/<name>.yaml
-│       ├── visualization.py             # ! LEGACY ! — 5 comparative charts (matplotlib/seaborn)
-│       ├── export.py                    # ! LEGACY ! — save metrics/weights/predictions to CSV
-│       └── portfolio_utils.py           # ! LEGACY ! — shared portfolio helpers
-│
-├── src/data/                            # ! LEGACY ! PACKAGE — kept for notebook compatibility only
-│   ├── loader.py                        # Original load_prices() + compute_returns() — DO NOT import in new code
-│   └── asset_selection.py              # Original select_assets() — DO NOT import in new code
-│
-├── artifacts/                           # Pipeline outputs — not committed to git
-│   ├── data/                            # Processed return DataFrames
-│   ├── models/                          # Serialised model parameters
-│   ├── predictions/                     # Expected return vectors per run
-│   ├── metrics/                         # Model evaluation (MAE, R²) and portfolio metrics
-│   ├── weights/                         # Optimised portfolio weights per run
-│   └── runs/                            # Execution logs: timestamp, config snapshot, status
-│
-├── tests/
-│   ├── conftest.py                      # Shared pytest fixtures (synthetic data, mock configs)
-│   ├── smoke_test_data_layer.py         # [X] 22 assert-based smoke tests — run without pytest
-│   ├── unit/                            # [ ] STUBS — pytest unit tests per module
-│   │   ├── test_returns.py
-│   │   ├── test_features.py
-│   │   ├── test_markowitz.py
-│   │   └── test_sharpe.py
-│   └── integration/                     # [ ] STUBS — end-to-end tests
-│       ├── test_pipeline.py
-│       └── test_api.py
-│
-├── notebooks/                           # Exploratory — not part of the pipeline, kept as-is
-│   ├── 00-compare_models.ipynb          # Main legacy pipeline — reference results
-│   ├── 01-markowitz_optimization.ipynb
-│   └── 02-linear_regretion.ipynb
-│
-├── article_official/article.tex         # Academic article (LaTeX)
-├── .github/workflows/ci.yml             # CI: install deps → pytest → docker build
-├── Dockerfile                            # Production image
-├── docker-compose.yml                   # Local service: API on :8000
-├── pyproject.toml                       # Build, pytest, ruff config
-├── requirements.txt                     # Production deps (includes pyyaml)
-└── requirements-dev.txt                 # Dev deps: pytest, httpx
+|
++-- config/
+|   +-- pipeline.yaml       # data (tickers, dates, frequency), asset selection, features,
+|   |                        #   models, optimization, evaluation, artifacts
+|   +-- models.yaml         # Ridge alpha, MLP hidden layers / neurons / activation
+|   +-- optimization.yaml   # solver, risk-free rate, frontier point count
+|   +-- api.yaml            # FastAPI host/port, CORS origins, Swagger metadata
+|   +-- scheduler.yaml      # enabled flag, trigger (interval|cron), interval_hours, cron expr
+|
++-- src/
+|   +-- ingestion/
+|   |   +-- __init__.py     # DataLayerResult + run_data_ingestion()
+|   |   +-- downloader.py   # yfinance wrapper
+|   |   +-- validators.py   # data quality checks and repair
+|   |
+|   +-- features/
+|   |   +-- returns.py
+|   |   +-- asset_selection.py
+|   |   +-- lag_features.py
+|   |
+|   +-- models/
+|   |   +-- base.py
+|   |   +-- ridge.py
+|   |   +-- mlp.py
+|   |   +-- blending.py
+|   |   +-- lr.py          # LEGACY
+|   |   +-- rnn.py         # LEGACY
+|   |
+|   +-- optimization/
+|   |   +-- markowitz.py
+|   |   +-- sharpe.py
+|   |   +-- evaluation.py
+|   |
+|   +-- pipeline/
+|   |   +-- __init__.py
+|   |   +-- context.py
+|   |   +-- stages.py
+|   |   +-- runner.py
+|   |   +-- registry.py
+|   |
+|   +-- api/
+|   |   +-- main.py
+|   |   +-- deps.py
+|   |   +-- routers/
+|   |   |   +-- health.py
+|   |   |   +-- assets.py
+|   |   |   +-- predictions.py
+|   |   |   +-- pipeline.py
+|   |   |   +-- portfolio.py
+|   |   |   +-- metrics.py
+|   |   |   +-- history.py
+|   |   |   +-- scheduler.py
+|   |   +-- schemas/
+|   |       +-- requests.py
+|   |       +-- responses.py
+|   |
+|   +-- persistence/
+|   |   +-- __init__.py
+|   |   +-- database.py
+|   |
+|   +-- scheduler/
+|   |   +-- __init__.py
+|   |   +-- jobs.py
+|   |   +-- scheduler.py
+|   |
+|   +-- utils/
+|       +-- __init__.py
+|       +-- config_loader.py
+|       +-- export.py
+|       +-- portfolio_utils.py  # LEGACY
+|       +-- visualization.py    # LEGACY
+|
++-- src/data/                   # LEGACY — notebook compatibility only
+|   +-- loader.py
+|   +-- asset_selection.py
+|
++-- artifacts/                  # not committed to git
+|   +-- data/
+|   +-- models/
+|   +-- predictions/
+|   +-- metrics/
+|   +-- weights/
+|   +-- runs/
+|   +-- logs/
+|   +-- pipeline_runs.db
+|
++-- tests/
+|   +-- conftest.py
+|   +-- smoke_test_data_layer.py   # 22 tests
+|   +-- unit/                      # 61 tests
+|   |   +-- test_returns.py
+|   |   +-- test_features.py
+|   |   +-- test_markowitz.py
+|   |   +-- test_sharpe.py
+|   |   +-- test_scheduler.py
+|   +-- integration/               # 71 tests
+|       +-- test_api.py
+|       +-- test_pipeline.py
+|       +-- test_scheduler_api.py
+|
++-- notebooks/                     # exploratory — legacy
++-- article_official/article.tex   # academic article (LaTeX)
++-- .github/workflows/ci.yml       # lint -> test -> docker -> deploy
++-- Dockerfile                     # python:3.10-slim, requirements-api.txt
++-- docker-compose.yml             # local: API on :8000
++-- fly.toml                       # Fly.io: region gru, persistent volume, health check
++-- entrypoint.sh                  # creates artifact subdirs on container start
++-- pyproject.toml                 # project metadata, pytest, ruff
++-- requirements-api.txt           # runtime deps (no torch/matplotlib/seaborn)
++-- requirements-dev.txt           # pytest, httpx, ruff
++-- requirements.txt               # full deps including notebooks
 ```
 
 ---
 
-## Module Status
+## Config Structure
 
-| Module | Status | Notes |
-|--------|--------|-------|
-| `src/ingestion/` | [X] Implemented | Full data download, validation, unified entry point |
-| `src/features/returns.py` | [X] Implemented | compute_returns, ajustar_risk_free, converter_periodo |
-| `src/features/asset_selection.py` | [X] Implemented | 4 strategies, config-driven |
-| `src/features/lag_features.py` | [ ] Stub | Next: Stage 2 |
-| `src/utils/config_loader.py` | [X] Implemented | get_config(name) |
-| `src/models/*.py` (new) | [ ] Stubs | Next: Stage 2 |
-| `src/optimization/*.py` | ! Legacy ! | Works, not yet refactored |
-| `src/pipeline/*.py` | [ ] Stubs | Next: Stage 2 |
-| `src/api/` | [ ] Stubs | Stage 3 |
-| `tests/smoke_test_data_layer.py` | [X] Implemented | 22 tests, no pytest required |
-| `tests/unit/` | [ ] Stubs | Stage 6 |
-| `tests/integration/` | [ ] Stubs | Stage 6 |
-
----
-
-## Data Flow (target — Stages 1–3)
-
-```
-config/pipeline.yaml
-        │
-        ▼
-run_data_ingestion()          [src/ingestion/__init__.py]
-  ├── load_prices()           [src/ingestion/downloader.py]   → yfinance
-  ├── compute_returns()       [src/features/returns.py]
-  └── select_assets()         [src/features/asset_selection.py]
-        │
-        ▼
-PipelineContext               [src/pipeline/context.py]
-  ├── build_lag_features()    [src/features/lag_features.py]
-  ├── train() / predict()     [src/models/ridge.py | mlp.py | rnn.py]
-  ├── blend()                 [src/models/blending.py]
-  ├── optimize()              [src/optimization/markowitz.py + sharpe.py]
-  └── evaluate()              [src/optimization/evaluation.py]
-        │
-        ▼
-artifacts/                    [src/utils/export.py]
-        │
-        ▼
-src/api/                      [FastAPI — Stage 3]
-  GET  /predictions
-  GET  /portfolio/weights
-  GET  /portfolio/frontier
-  GET  /metrics/portfolio
-  POST /pipeline/run
-```
-
----
-
-## Config Structure (`config/pipeline.yaml`)
+### `config/pipeline.yaml`
 
 ```yaml
 data:
-  tickers: [...]          # B3 ticker symbols
+  tickers: []              # B3 ticker symbols (e.g. ["PETR4.SA", "VALE3.SA"])
   start_date: "2010-01-01"
   end_date:   "2025-12-31"
-  frequency:  "monthly"
+  frequency:  "monthly"   # daily | weekly | monthly
 
 asset_selection:
-  method:            "stable_corr_pairs"
+  method:            "stable_corr_pairs"   # 4 options available
   n_assets:          10
   min_data_coverage: 0.85
 
 features:
-  lag_window:  24
-  min_history: 36
+  lag_window:  24    # past periods used as lag features (t-1 ... t-lag_window)
+  min_history: 36    # minimum periods required per asset
 
 models:
-  default:     "ridge"
-  blend_alpha: 0.3
+  default:     "ridge"   # ridge | mlp
+  blend_alpha: 0.3       # weight of ML in: final_mu = alpha * ml + (1-alpha) * hist
   train_ratio: 0.7
 
 optimization:
-  risk_free_rate: 0.15
+  risk_free_rate: 0.15   # annual (SELIC 2025)
   frequency:      "monthly"
   solver:         "SLSQP"
-  weight_bounds:  [0.0, 1.0]
-
-evaluation:
-  metrics: [sharpe_ratio, annualized_return, annualized_volatility, cumulative_return]
+  weight_bounds:  [0.0, 1.0]   # no short selling
 
 artifacts:
-  base_dir:         "artifacts"
-  data_dir:         "artifacts/data"
-  models_dir:       "artifacts/models"
-  predictions_dir:  "artifacts/predictions"
-  metrics_dir:      "artifacts/metrics"
-  weights_dir:      "artifacts/weights"
-  runs_dir:         "artifacts/runs"
+  base_dir:        "artifacts"
+  data_dir:        "artifacts/data"
+  models_dir:      "artifacts/models"
+  predictions_dir: "artifacts/predictions"
+  metrics_dir:     "artifacts/metrics"
+  weights_dir:     "artifacts/weights"
+  runs_dir:        "artifacts/runs"
 ```
 
 ---
@@ -207,10 +257,14 @@ artifacts:
 ## Key Design Decisions
 
 | Decision | Rationale |
-|----------|-----------|
-| `DataLayerResult` dataclass in `src/ingestion/__init__.py` | Typed contract between ingestion and pipeline; avoids passing bare DataFrames |
-| `select_assets(prices=...)` optional param | Prevents double-downloading when prices are already in memory |
-| `src/data/` kept as legacy | Notebooks still import from it; deleting would break `00-compare_models.ipynb` |
-| `artifacts/` not in git | Outputs are reproducible from config + code; no binary blobs in version control |
-| `config/` outside `src/` | Config is operational, not code — can change without touching source |
-| Stubs with docstrings only | Scaffolding lets the codebase compile and import cleanly before implementation begins |
+|---|---|
+| All parameters in `config/*.yaml` | Reproducibility — changing behavior never requires touching source code |
+| `DataLayerResult` dataclass | Typed contract between ingestion and pipeline; avoids passing bare DataFrames |
+| `PipelineContext` passed between stages | Shared mutable state avoids re-reading artifacts between adjacent stages |
+| `blend_alpha = 0.3` default | Conservative — captures ML signal while limiting exposure to overfitting |
+| Walk-forward splits only | Strict no-look-ahead: model at time t sees only t-1 and earlier |
+| `artifacts/` excluded from git | Outputs are reproducible from config + code; no binary blobs in version control |
+| `requirements-api.txt` separate from `requirements.txt` | Docker image excludes torch (~2 GB) and matplotlib — reduces image size significantly |
+| `entrypoint.sh` recreates artifact dirs | Fly.io volume mount shadows Dockerfile-created dirs; script runs before uvicorn |
+| SQLite for run history | Zero-dependency persistence; sufficient for the query patterns (list, single, compare) |
+| `src/data/` kept as legacy package | Notebooks still import from it; deleting breaks `00-compare_models.ipynb` |

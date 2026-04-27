@@ -20,7 +20,7 @@ Technical architecture reference: see **ARCHITECTURE.md**.
 
 ---
 
-## Current Stage: Stage 9 — Application deployment (next)
+## Current Stage: Stage 10 — COMPLETE (all stages done)
 
 ### Stage 1 — COMPLETE
 - Directory structure, YAML config system (`config/pipeline.yaml`, `models.yaml`, `optimization.yaml`, `api.yaml`)
@@ -133,6 +133,16 @@ Image size reduction: `torch` alone is ~2 GB; the API image installs only what t
 - `src/models/lr.py` — original Ridge + MLP implementation
 - `src/models/rnn.py` — original LSTM/RNN (PyTorch)
 - `notebooks/` — all notebooks
+
+### Stage 9 — COMPLETE
+- Deployed to Fly.io (app: `dlfinance-api`, region: `gru` / São Paulo)
+- `fly.toml` — region `gru`, persistent volume `dl_artifacts` at `/app/artifacts`, HTTPS enforced, health check on `/health` every 30s, `min_machines_running = 1`
+- `entrypoint.sh` — recreates artifact subdirectories at container start (volume mount shadows Dockerfile-created dirs)
+- `.github/workflows/ci.yml` — extended with `deploy` job: `flyctl deploy --remote-only` on push to `main` only (requires `FLY_API_TOKEN` secret, `production` environment)
+
+### Stage 10 — COMPLETE
+- `README.md` — complete rewrite in English: results table, ML methodology, architecture overview, API endpoint reference, local execution, deployment, CI/CD, technology stack, MLOps practices
+- `ARCHITECTURE.md` — updated: all modules marked implemented, full data flow diagram, updated directory tree, deployment details added
 
 ---
 
