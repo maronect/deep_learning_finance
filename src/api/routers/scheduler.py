@@ -113,8 +113,6 @@ def trigger_pipeline(background_tasks: BackgroundTasks) -> TriggerResponse:
     This endpoint does not wait for the pipeline to complete. Use
     GET /pipeline/runs/{run_id} to poll the status.
     """
-    from src.scheduler.jobs import run_scheduled_pipeline
-
     import datetime
 
     run_id = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S") + "_manual"
