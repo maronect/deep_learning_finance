@@ -15,7 +15,6 @@ Domain: portfolio optimization for Brazilian stocks (B3, 2010–2025) using Mode
 Three strategies compared: Classic Markowitz, Markowitz + Ridge Regression, Markowitz + MLP.
 Best result: Ridge Regression — Sharpe 0.591 vs 0.543 classic.
 
-Full evolution plan: see **ROADMAP.md** (10 stages from research to deployed API).
 Technical architecture reference: see **ARCHITECTURE.md**.
 
 ---
