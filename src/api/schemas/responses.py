@@ -189,3 +189,21 @@ class SyncResponse(BaseModel):
 
     synced: int
     message: str
+
+
+class EquityCurvePoint(BaseModel):
+    """Single point on the portfolio equity curve."""
+
+    date: str
+    cumulative_return: float
+
+
+class EquityCurveResponse(BaseModel):
+    """Response for GET /portfolio/equity-curve."""
+
+    run_id: str
+    model: str
+    period_start: str
+    period_end: str
+    n_points: int
+    points: list[EquityCurvePoint]

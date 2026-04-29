@@ -308,6 +308,7 @@ def stage_export_artifacts(context: PipelineContext) -> None:
         ValueError: If required prior stages have not been run.
     """
     from src.utils.export import (
+        save_equity_curve,
         save_features,
         save_model,
         save_portfolio_metrics,
@@ -352,9 +353,13 @@ def stage_export_artifacts(context: PipelineContext) -> None:
     save_portfolio_weights(context.weights, context.selected_assets, model_name, weights_path)
     save_portfolio_metrics(context.metrics, metrics_path)
 
+    equity_path = f"{art_cfg['metrics_dir']}/{run_id}_{model_name}_equity_curve.csv"
+    if context.portfolio_returns is not None:
+        save_equity_curve(context.portfolio_returns, equity_path)
+
     context.artifacts_written = [
         returns_path, X_path, y_path, model_path,
-        preds_path, weights_path, metrics_path, manifest_path,
+        preds_path, weights_path, metrics_path, equity_path, manifest_path,
     ]
     context.status = "completed"
 

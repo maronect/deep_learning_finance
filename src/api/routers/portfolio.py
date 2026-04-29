@@ -12,8 +12,11 @@ import numpy as np
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 
-from src.api.deps import predictions_path, resolve_run, returns_path, weights_path
+from src.api.deps import equity_curve_path, predictions_path, resolve_run, returns_path, weights_path
+from src.pipeline.registry import load_run_manifest
 from src.api.schemas.responses import (
+    EquityCurvePoint,
+    EquityCurveResponse,
     FrontierPoint,
     FrontierResponse,
     PortfolioWeightsResponse,
@@ -155,6 +158,81 @@ def get_frontier(
     return FrontierResponse(
         run_id=resolved_id,
         risk_free_rate=rf_annual,
+        n_points=len(points),
+        points=points,
+    )
+
+
+@router.get(
+    "/equity-curve",
+    response_model=EquityCurveResponse,
+    summary="Retrieve portfolio equity curve over the out-of-sample test period",
+)
+def get_equity_curve(
+    run_id: Optional[str] = Query(
+        default=None,
+        description="Run ID to retrieve equity curve from. Defaults to the latest completed run.",
+    ),
+) -> EquityCurveResponse:
+    """Return the portfolio cumulative return series over the out-of-sample test period.
+
+    The equity curve starts at the first test period (value = 1 + r_1) and compounds
+    forward. A value of 1.5 means the portfolio gained 50% since the start of the test
+    period.
+
+    Raises:
+        404: If no completed runs exist or the equity curve artifact is missing.
+             Re-run the pipeline to generate the artifact.
+    """
+    try:
+        resolved_id, model = resolve_run(run_id)
+    except (LookupError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    ec_path = equity_curve_path(resolved_id, model)
+
+    if ec_path.exists():
+        df = pd.read_csv(ec_path)
+    else:
+        # Fallback: compute on-the-fly from existing artifacts.
+        # The walk-forward test period is a contiguous slice:
+        #   test_start = lag_window + int((n_returns - lag_window) * train_ratio)
+        ret_path = returns_path(resolved_id)
+        w_path = weights_path(resolved_id, model)
+        for p in (ret_path, w_path):
+            if not p.exists():
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Artifact not found: {p}. Ensure the pipeline ran successfully.",
+                )
+
+        returns_df = pd.read_csv(ret_path, index_col=0, parse_dates=True)
+        weights_df = pd.read_csv(w_path)
+        manifest = load_run_manifest(resolved_id)
+        pcfg = manifest.get("pipeline_cfg", {})
+        lag_window: int = pcfg.get("features", {}).get("lag_window", 24)
+        train_ratio: float = pcfg.get("models", {}).get("train_ratio", 0.7)
+
+        n = len(returns_df)
+        test_start = lag_window + int((n - lag_window) * train_ratio)
+        test_returns = returns_df.iloc[test_start:]
+
+        weights_s = weights_df.set_index("Ticker")["Weight"]
+        common = weights_s.index.intersection(test_returns.columns)
+        portfolio_returns = test_returns[common].dot(weights_s[common].values)
+
+        equity = (1 + portfolio_returns).cumprod()
+        df = pd.DataFrame({"date": equity.index.astype(str), "cumulative_return": equity.values})
+
+    points = [
+        EquityCurvePoint(date=str(row["date"]), cumulative_return=float(row["cumulative_return"]))
+        for _, row in df.iterrows()
+    ]
+    return EquityCurveResponse(
+        run_id=resolved_id,
+        model=model,
+        period_start=str(df["date"].iloc[0]),
+        period_end=str(df["date"].iloc[-1]),
         n_points=len(points),
         points=points,
     )

@@ -61,6 +61,12 @@ def returns_path(run_id: str) -> Path:
     return Path(cfg["data_dir"]) / f"{run_id}_returns.csv"
 
 
+def equity_curve_path(run_id: str, model: str) -> Path:
+    """Resolve the equity curve CSV path for a given run."""
+    cfg = _artifact_cfg()
+    return Path(cfg["metrics_dir"]) / f"{run_id}_{model}_equity_curve.csv"
+
+
 def resolve_run(run_id: Optional[str]) -> tuple[str, str]:
     """Resolve run_id and model_name, falling back to the latest completed run.
 
