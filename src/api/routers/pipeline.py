@@ -36,7 +36,11 @@ def _execute_pipeline(run_id: str, stages: Optional[list[str]]) -> None:
     try:
         ctx = run_pipeline(stages=stages)
         with _run_lock:
-            _run_status[run_id] = ctx.status  # "completed" or "failed"
+            # Partial runs (subset of stages) never reach stage_export_artifacts,
+            # so ctx.status stays "running" even though the task finished. Map
+            # any non-failed completion to "completed" to avoid a stale "running"
+            # entry that would block future runs via the 429 guard.
+            _run_status[run_id] = ctx.status if ctx.status != "running" else "completed"
     except Exception:
         with _run_lock:
             _run_status[run_id] = "failed"

@@ -149,10 +149,22 @@ class TestPipelineRun:
         r = client.post("/pipeline/run", json={"stages": ["ingest", "compute_returns"]})
         assert r.status_code == 200
 
+    def test_concurrent_run_rejected_with_429(self, client: TestClient) -> None:
+        from src.api.routers.pipeline import _run_lock, _run_status
+        r = client.post("/pipeline/run", json={})
+        run_id = r.json().get("run_id", "")
+        # Force the run to appear still active, then verify 429 is returned.
+        with _run_lock:
+            _run_status[run_id] = "running"
+        r2 = client.post("/pipeline/run", json={})
+        assert r2.status_code == 429
+        assert "detail" in r2.json()
+        # Restore so subsequent tests are not blocked.
+        with _run_lock:
+            _run_status[run_id] = "completed"
+
     def test_run_id_is_unique(self, client: TestClient) -> None:
-        import time
         r1 = client.post("/pipeline/run", json={}).json()["run_id"]
-        time.sleep(1)
         r2 = client.post("/pipeline/run", json={}).json()["run_id"]
         assert r1 != r2
 
