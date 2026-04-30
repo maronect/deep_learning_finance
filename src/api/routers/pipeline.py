@@ -64,6 +64,13 @@ def run_pipeline_endpoint(
     stages = request.stages
 
     with _run_lock:
+        active = [rid for rid, s in _run_status.items() if s == "running"]
+        if active:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Pipeline already running (run_id={active[0]}). "
+                       f"Check status at GET /pipeline/runs/{active[0]}.",
+            )
         _run_status[run_id] = "running"
 
     background_tasks.add_task(_execute_pipeline, run_id, stages)

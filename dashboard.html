@@ -70,11 +70,9 @@
         <span id="status-text" class="text-muted">connecting...</span>
       </div>
       <div id="api-version" class="text-xs text-muted mt-1"></div>
-      <div class="text-xs text-muted mt-1 flex items-center justify-end gap-3">
+      <div class="text-xs text-muted mt-1">
         <a href="https://dlfinance-api.fly.dev/docs" target="_blank" class="hover:text-accent transition-colors">API Docs</a>
-        <button id="trigger-btn" onclick="triggerPipeline()" class="hover:text-accent transition-colors underline bg-transparent border-0 p-0 font-mono text-xs text-muted cursor-pointer">Trigger Pipeline</button>
       </div>
-      <p id="trigger-msg" class="hidden text-xs mt-1"></p>
     </div>
   </header>
 
@@ -371,34 +369,6 @@
       if (type === 'table') hide(prefix + '-table-wrap');
       if (type === 'card') hide(prefix + '-card');
       show(prefix + '-loading');
-    }
-
-    // ====================================================================
-    // Trigger Pipeline
-    // ====================================================================
-    async function triggerPipeline() {
-      const btn = document.getElementById('trigger-btn');
-      const msg = document.getElementById('trigger-msg');
-      btn.disabled = true;
-      btn.textContent = 'Starting...';
-      try {
-        const res = await fetch(BASE + '/pipeline/run', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        msg.textContent = 'Pipeline started. Results will appear after completion.';
-        msg.className = 'text-xs mt-1 text-green-400';
-        msg.classList.remove('hidden');
-      } catch (e) {
-        msg.textContent = 'Failed to trigger: ' + e.message;
-        msg.className = 'text-xs mt-1 text-red-400';
-        msg.classList.remove('hidden');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Trigger Pipeline';
-      }
     }
 
     // ====================================================================

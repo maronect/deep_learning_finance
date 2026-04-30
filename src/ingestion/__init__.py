@@ -11,6 +11,7 @@ DataLayerResult
     Typed dataclass returned by run_data_ingestion().
 """
 
+import datetime as _dt
 from dataclasses import dataclass
 from typing import Any
 
@@ -71,13 +72,18 @@ def run_data_ingestion() -> DataLayerResult:
     data_cfg = cfg["data"]
     sel_cfg = cfg.get("asset_selection", {})
 
+    end_date: str = data_cfg["end_date"]
+    if end_date == "today":
+        end_date = _dt.date.today().isoformat()
+        cfg["data"]["end_date"] = end_date
+
     universe = get_brazilian_stocks_universe()
 
     # Download once, reuse for both return computation and asset selection
     prices = load_prices(
         tickers=universe,
         start=data_cfg["start_date"],
-        end=data_cfg["end_date"],
+        end=end_date,
         min_data_coverage=sel_cfg.get("min_data_coverage", 0.85),
     )
 
@@ -85,7 +91,7 @@ def run_data_ingestion() -> DataLayerResult:
 
     selected = select_assets(
         start_date=data_cfg["start_date"],
-        end_date=data_cfg["end_date"],
+        end_date=end_date,
         method=sel_cfg.get("method", "stable_corr_pairs"),
         n_assets=sel_cfg.get("n_assets", 10),
         return_freq=data_cfg["frequency"],

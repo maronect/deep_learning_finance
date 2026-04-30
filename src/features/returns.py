@@ -62,6 +62,16 @@ def compute_returns(
         return prices.pct_change().dropna()
 
     resampled = prices.resample(_FREQ_RESAMPLE_MAP[freq]).last()
+
+    # Drop the last period if it is incomplete. resample('ME') labels each
+    # bucket with the month-end date; if the last actual price is more than
+    # 5 days before that label, the period has not closed and its return
+    # would be based on partial data, distorting annualized metrics.
+    if len(resampled) > 1:
+        days_short = (resampled.index[-1] - prices.index[-1]).days
+        if days_short > 5:
+            resampled = resampled.iloc[:-1]
+
     return resampled.pct_change().dropna()
 
 

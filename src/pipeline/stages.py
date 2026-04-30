@@ -33,6 +33,7 @@ def stage_ingest(context: PipelineContext) -> None:
     context.prices = result.prices
     context.returns_full = result.returns
     context.selected_assets = result.selected_assets
+    context.pipeline_cfg["data"]["end_date"] = result.config["data"]["end_date"]
 
 
 def stage_compute_returns(context: PipelineContext) -> None:

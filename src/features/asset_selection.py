@@ -291,6 +291,8 @@ def select_assets(
     if method == "stable_corr_pairs":
         return _select_stable_pairs(
             prices,
+            start_year=int(start_date[:4]),
+            end_year=int(end_date[:4]),
             n_pairs=n_assets // 2,
             return_freq=return_freq,
         )
