@@ -1,0 +1,76 @@
+{
+  "run_id": "20260417T002401",
+  "started_at": "2026-04-17T00:24:01.266268",
+  "status": "running",
+  "error": null,
+  "selected_assets": [
+    "PETR3.SA",
+    "WEGE3.SA",
+    "TOTS3.SA",
+    "VALE3.SA",
+    "CSNA3.SA",
+    "RADL3.SA",
+    "PCAR3.SA",
+    "VIVT3.SA",
+    "ABEV3.SA",
+    "MRVE3.SA"
+  ],
+  "artifacts_written": [],
+  "pipeline_cfg": {
+    "data": {
+      "tickers": [],
+      "start_date": "2010-01-01",
+      "end_date": "2025-12-31",
+      "frequency": "monthly"
+    },
+    "asset_selection": {
+      "method": "stable_corr_pairs",
+      "n_assets": 10,
+      "min_data_coverage": 0.85
+    },
+    "features": {
+      "lag_window": 24,
+      "min_history": 36
+    },
+    "models": {
+      "default": "ridge",
+      "blend_alpha": 0.3,
+      "train_ratio": 0.7
+    },
+    "optimization": {
+      "risk_free_rate": 0.15,
+      "frequency": "monthly",
+      "solver": "SLSQP",
+      "weight_bounds": [
+        0.0,
+        1.0
+      ]
+    },
+    "evaluation": {
+      "metrics": [
+        "sharpe_ratio",
+        "annualized_return",
+        "annualized_volatility",
+        "cumulative_return"
+      ]
+    },
+    "artifacts": {
+      "base_dir": "artifacts",
+      "data_dir": "artifacts/data",
+      "models_dir": "artifacts/models",
+      "predictions_dir": "artifacts/predictions",
+      "metrics_dir": "artifacts/metrics",
+      "weights_dir": "artifacts/weights",
+      "runs_dir": "artifacts/runs"
+    }
+  },
+  "metrics": {
+    "Model": "ridge",
+    "Sharpe": -0.19624174096788277,
+    "Annualized_Return": 0.10933218888315754,
+    "Annualized_Volatility": 0.1853373855788157,
+    "Cumulative_Return": 1.448783696021328,
+    "Mean_Return": 0.008684005985484832,
+    "Volatility": 0.05350229472741536
+  }
+}

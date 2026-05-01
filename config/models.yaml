@@ -1,0 +1,23 @@
+## ML model hyperparameters
+## Each model has its own section. Values here override defaults in source code.
+
+ridge:
+  alpha: 1.0            # L2 regularization strength
+
+linear_regression:
+  fit_intercept: true
+
+mlp:
+  hidden_layer_sizes: [50, 50]
+  activation: "relu"
+  max_iter: 500
+  random_state: 42
+
+rnn:
+  hidden_size: 64
+  num_layers: 2
+  dropout: 0.2
+  learning_rate: 0.001
+  epochs: 100
+  batch_size: 32
+  random_state: 42

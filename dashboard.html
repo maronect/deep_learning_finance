@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" /> 
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='12' fill='%234f8ef7'/><polyline points='15,70 35,45 55,58 80,25'              
+  stroke='white' stroke-width='10' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deep Learning Finance — Portfolio Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            surface: '#0f1117',
+            panel:   '#1a1d27',
+            border:  '#2a2d3a',
+            accent:  '#4f8ef7',
+            muted:   '#6b7280',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background-color: #0f1117; }
+    .skeleton {
+      background: linear-gradient(90deg, #1a1d27 25%, #22263a 50%, #1a1d27 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 4px;
+    }
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+      flex-shrink: 0;
+    }
+    .status-ok   { background: #22c55e; box-shadow: 0 0 6px #22c55e88; }
+    .status-err  { background: #ef4444; box-shadow: 0 0 6px #ef444488; }
+    .status-wait { background: #f59e0b; }
+    thead th { position: sticky; top: 0; z-index: 1; }
+    .table-wrap { max-height: 320px; overflow-y: auto; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1a1d27; }
+    ::-webkit-scrollbar-thumb { background: #2a2d3a; border-radius: 3px; }
+    canvas { display: block; }
+  </style>
+</head>
+<body class="text-gray-100 min-h-screen font-mono">
+
+  <!-- ================================================================
+       HEADER
+  ================================================================ -->
+  <header class="border-b border-border px-6 py-4 flex items-start justify-between">
+    <div>
+      <span class="text-sm text-muted uppercase tracking-widest">ML Engineering</span>
+      <h1 class="text-xl font-semibold text-white mt-0.5">Deep Learning Finance</h1>
+      <p class="text-xs text-muted mt-0.5">Brazilian Equity Portfolio Optimization — B3 2010-2025</p>
+      <p class="text-xs text-muted mt-1">ML-driven portfolio optimization using Ridge Regression + Markowitz framework on 10 Brazilian equities (B3).</p>
+      <p class="text-xs text-yellow-500/70 mt-1">[!] For educational and research purposes only. Not financial advice.</p>
+    </div>
+    <div class="text-right">
+      <div id="api-status" class="flex items-center justify-end text-sm">
+        <span class="status-dot status-wait" id="status-dot"></span>
+        <span id="status-text" class="text-muted">connecting...</span>
+      </div>
+      <div id="api-version" class="text-xs text-muted mt-1"></div>
+      <div class="text-xs text-muted mt-1">
+        <a href="https://dlfinance-api.fly.dev/docs" target="_blank" class="hover:text-accent transition-colors">API Docs</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="px-6 py-6 space-y-6 max-w-screen-xl mx-auto">
+
+    <!-- ================================================================
+         METRIC CARDS
+    ================================================================ -->
+    <section>
+      <h2 class="text-xs text-muted uppercase tracking-widest mb-3">Portfolio Metrics</h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+
+        <div class="bg-panel border border-accent/30 rounded-lg p-4 flex flex-col">
+          <p class="text-xs text-muted mb-1">Sharpe Ratio</p>
+          <p id="card-sharpe" class="text-4xl font-semibold text-accent leading-none mb-3">--</p>
+          <p class="text-xs text-muted leading-snug mt-auto">Risk-adjusted return</p>
+        </div>
+
+        <div class="bg-panel border border-border rounded-lg p-4 flex flex-col">
+          <p class="text-xs text-muted mb-1">Annualized Return</p>
+          <p id="card-return" class="text-2xl font-semibold text-white mb-2">--</p>
+          <p class="text-xs text-muted leading-snug mt-auto">Expected yearly portfolio gain</p>
+        </div>
+
+        <div class="bg-panel border border-border rounded-lg p-4 flex flex-col">
+          <p class="text-xs text-muted mb-1">Annualized Volatility</p>
+          <p id="card-volatility" class="text-2xl font-semibold text-white mb-2">--</p>
+          <p class="text-xs text-muted leading-snug mt-auto">Annualized standard deviation of returns</p>
+        </div>
+
+        <div class="bg-panel border border-border rounded-lg p-4 flex flex-col">
+          <p class="text-xs text-muted mb-1">Cumulative Return</p>
+          <p id="card-cumulative" class="text-2xl font-semibold text-white mb-2">--</p>
+          <p class="text-xs text-muted leading-snug mt-auto">Total return over the full period</p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================================================================
+         EQUITY CURVE
+    ================================================================ -->
+    <section>
+      <div class="bg-panel border border-border rounded-lg p-5">
+        <div class="flex items-start justify-between mb-4">
+          <div>
+            <h2 class="text-sm font-semibold text-white">Portfolio Performance &mdash; Out-of-Sample Test Period</h2>
+            <p id="equity-period" class="text-xs text-muted mt-0.5"></p>
+          </div>
+          <span id="equity-model" class="text-xs text-muted bg-border px-2 py-0.5 rounded"></span>
+        </div>
+        <div id="equity-loading" class="skeleton h-56 w-full"></div>
+        <div id="equity-error" class="hidden text-xs mt-2"></div>
+        <div id="equity-chart-wrap" class="hidden">
+          <canvas id="equity-chart" height="220"></canvas>
+        </div>
+        <p id="equity-legend" class="hidden text-xs text-muted mt-3 leading-snug">
+          Cumulative portfolio return starting at 1.0 on the first test period. A value of 1.5 means +50% since the start of the test period. The dashed line marks the break-even level.
+        </p>
+      </div>
+    </section>
+
+    <!-- ================================================================
+         CHARTS ROW
+    ================================================================ -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- Portfolio Weights -->
+      <div class="bg-panel border border-border rounded-lg p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-white">Portfolio Weights</h2>
+          <span id="weights-model" class="text-xs text-muted bg-border px-2 py-0.5 rounded"></span>
+        </div>
+        <div id="weights-loading" class="skeleton h-52 w-full"></div>
+        <div id="weights-error" class="hidden text-xs mt-2"></div>
+        <div id="weights-chart-wrap" class="hidden">
+          <canvas id="weights-chart" height="210"></canvas>
+        </div>
+      </div>
+
+      <!-- Efficient Frontier -->
+      <div class="bg-panel border border-border rounded-lg p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-white">Efficient Frontier</h2>
+          <span class="text-xs text-muted">x = Volatility, y = Expected Return</span>
+        </div>
+        <div id="frontier-loading" class="skeleton h-52 w-full"></div>
+        <div id="frontier-error" class="hidden text-xs mt-2"></div>
+        <div id="frontier-chart-wrap" class="hidden">
+          <canvas id="frontier-chart" height="210"></canvas>
+        </div>
+        <p id="frontier-legend" class="hidden text-xs text-muted mt-3 leading-snug">
+          Each point represents a portfolio. The green dot is the allocation with the highest Sharpe ratio.
+        </p>
+      </div>
+
+    </section>
+
+    <!-- ================================================================
+         TABLES ROW
+    ================================================================ -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+      <!-- Predictions -->
+      <div class="bg-panel border border-border rounded-lg p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-white">Expected Returns by Asset</h2>
+          <span id="pred-model" class="text-xs text-muted bg-border px-2 py-0.5 rounded"></span>
+        </div>
+        <div id="pred-loading" class="skeleton h-48 w-full"></div>
+        <div id="pred-error" class="hidden text-xs mt-2"></div>
+        <div id="pred-table-wrap" class="hidden table-wrap">
+          <table class="w-full text-xs">
+            <thead class="bg-panel">
+              <tr class="text-left text-muted border-b border-border">
+                <th class="pb-2 pr-4">Ticker</th>
+                <th class="pb-2 pr-4 text-right">Predicted Return</th>
+                <th class="pb-2 text-right">Model</th>
+              </tr>
+            </thead>
+            <tbody id="pred-body" class="divide-y divide-border"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Run History -->
+      <div class="bg-panel border border-border rounded-lg p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-white">Execution History</h2>
+          <span id="history-count" class="text-xs text-muted"></span>
+        </div>
+        <div id="history-loading" class="skeleton h-48 w-full"></div>
+        <div id="history-error" class="hidden text-xs text-red-400 mt-2"></div>
+        <div id="history-table-wrap" class="hidden table-wrap">
+          <table class="w-full text-xs">
+            <thead class="bg-panel">
+              <tr class="text-left text-muted border-b border-border">
+                <th class="pb-2 pr-3">Started</th>
+                <th class="pb-2 pr-3">Status</th>
+                <th class="pb-2 pr-3">Model</th>
+                <th class="pb-2 pr-3 text-right">Sharpe</th>
+                <th class="pb-2 text-right">Ann. Return</th>
+              </tr>
+            </thead>
+            <tbody id="history-body" class="divide-y divide-border"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ================================================================
+         SCHEDULER STATUS
+    ================================================================ -->
+    <section>
+      <h2 class="text-xs text-muted uppercase tracking-widest mb-3">Scheduler</h2>
+      <div id="scheduler-loading" class="skeleton h-24 w-full rounded-lg"></div>
+      <div id="scheduler-error" class="hidden text-xs text-red-400 mt-2"></div>
+      <div id="scheduler-card" class="hidden bg-panel border border-border rounded-lg p-5">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div>
+            <p class="text-xs text-muted mb-1">State</p>
+            <p id="sched-state" class="text-sm font-semibold"></p>
+          </div>
+          <div>
+            <p class="text-xs text-muted mb-1">Enabled</p>
+            <p id="sched-enabled" class="text-sm font-semibold"></p>
+          </div>
+          <div>
+            <p class="text-xs text-muted mb-1">Jobs</p>
+            <p id="sched-jobs" class="text-sm font-semibold text-white"></p>
+          </div>
+          <div>
+            <p class="text-xs text-muted mb-1">Next Run</p>
+            <p id="sched-next" class="text-sm font-semibold text-white"></p>
+          </div>
+          <div>
+            <p class="text-xs text-muted mb-1">Last Run</p>
+            <p id="sched-last-run" class="text-sm font-semibold text-white">--</p>
+          </div>
+        </div>
+        <div id="sched-triggers" class="mt-3 space-y-1"></div>
+      </div>
+    </section>
+
+    <!-- ================================================================
+         FOOTER
+    ================================================================ -->
+    <footer class="text-xs text-muted text-center pt-2 pb-6 border-t border-border">
+      Deep Learning Finance API &mdash;
+      <span id="footer-ts">Last loaded: --</span>
+      &nbsp;&mdash;&nbsp;
+      <span id="refresh-countdown">Refreshing in 60s</span>
+      <div class="border-t border-border mt-4 pt-4 text-muted max-w-2xl mx-auto leading-relaxed">
+        This dashboard is an academic and practical ML Engineering project.
+        Portfolio allocations and return predictions are outputs of experimental
+        models and do not constitute financial advice, investment recommendations,
+        or solicitation of any kind. Past performance of models does not guarantee
+        future results.
+      </div>
+    </footer>
+
+  </main>
+
+  <script>
+    // ====================================================================
+    // Config
+    // ====================================================================
+    const BASE = 'https://dlfinance-api.fly.dev';
+    const REFRESH_INTERVAL = 60;
+
+    Chart.defaults.color = '#6b7280';
+    Chart.defaults.font.family = 'ui-monospace, SFMono-Regular, monospace';
+    Chart.defaults.font.size = 11;
+
+    let weightsChartInst = null;
+    let frontierChartInst = null;
+    let equityChartInst = null;
+
+    let countdownTimer = null;
+    let countdownValue = REFRESH_INTERVAL;
+
+    // ====================================================================
+    // Utilities
+    // ====================================================================
+    async function apiFetch(path) {
+      const res = await fetch(BASE + path);
+      if (!res.ok) {
+        const err = new Error(`HTTP ${res.status} — ${path}`);
+        err.status = res.status;
+        throw err;
+      }
+      return res.json();
+    }
+
+    function fmt(n, decimals = 3) {
+      if (n == null || isNaN(n)) return '--';
+      return Number(n).toFixed(decimals);
+    }
+
+    function fmtPct(n) {
+      if (n == null || isNaN(n)) return '--';
+      return (Number(n) * 100).toFixed(2) + '%';
+    }
+
+    function show(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('hidden');
+    }
+
+    function hide(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
+    }
+
+    function showChart(prefix) {
+      hide(prefix + '-loading');
+      show(prefix + '-chart-wrap');
+    }
+
+    function showTable(prefix) {
+      hide(prefix + '-loading');
+      show(prefix + '-table-wrap');
+    }
+
+    function emptyStateHTML() {
+      const cmd = `curl -X POST https://dlfinance-api.fly.dev/pipeline/run \\
+  -H "Content-Type: application/json" -d '{}'`;
+      return `<div class="py-8 px-4 text-center">
+        <p class="text-sm font-semibold text-white mb-2">No pipeline runs available</p>
+        <p class="text-xs text-muted mb-4">Trigger the pipeline to generate portfolio results.</p>
+        <pre class="text-xs bg-surface border border-border rounded p-3 text-gray-300 overflow-x-auto inline-block text-left">${cmd}</pre>
+      </div>`;
+    }
+
+    function setError(prefix, err) {
+      hide(prefix + '-loading');
+      const el = document.getElementById(prefix + '-error');
+      if (!el) return;
+      if (err && err.status === 404) {
+        el.className = 'text-xs mt-2';
+        el.innerHTML = emptyStateHTML();
+      } else {
+        el.className = 'text-xs text-red-400 mt-2';
+        el.textContent = err ? (err.message || String(err)) : 'Unknown error';
+      }
+      el.classList.remove('hidden');
+    }
+
+    function resetSection(prefix, type) {
+      const errEl = document.getElementById(prefix + '-error');
+      if (errEl) errEl.classList.add('hidden');
+      if (type === 'chart') hide(prefix + '-chart-wrap');
+      if (type === 'table') hide(prefix + '-table-wrap');
+      if (type === 'card') hide(prefix + '-card');
+      show(prefix + '-loading');
+    }
+
+    // ====================================================================
+    // 1. Health
+    // ====================================================================
+    async function loadHealth() {
+      try {
+        const data = await apiFetch('/health');
+        const dot = document.getElementById('status-dot');
+        dot.className = 'status-dot ' + (data.status === 'ok' ? 'status-ok' : 'status-err');
+        const stEl = document.getElementById('status-text');
+        stEl.textContent = data.status === 'ok' ? 'API online' : 'API degraded';
+        stEl.className = data.status === 'ok' ? 'text-green-400 text-sm' : 'text-red-400 text-sm';
+        document.getElementById('api-version').textContent = 'v' + (data.version || '?');
+      } catch (e) {
+        document.getElementById('status-dot').className = 'status-dot status-err';
+        const stEl = document.getElementById('status-text');
+        stEl.textContent = 'API unreachable';
+        stEl.className = 'text-red-400 text-sm';
+      }
+    }
+
+    // ====================================================================
+    // 2. Metrics cards
+    // ====================================================================
+    async function loadSummary() {
+      try {
+        const metrics = await apiFetch('/metrics/portfolio');
+        document.getElementById('card-sharpe').textContent    = fmt(metrics.sharpe, 3);
+        document.getElementById('card-return').textContent    = fmtPct(metrics.annualized_return);
+        document.getElementById('card-volatility').textContent = fmtPct(
+          metrics.annualized_volatility ?? metrics.volatility
+        );
+        document.getElementById('card-cumulative').textContent = fmtPct(metrics.cumulative_return);
+      } catch (e) {
+        // non-fatal: cards stay at --
+      }
+    }
+
+    // ====================================================================
+    // 3. Equity Curve — line chart
+    // ====================================================================
+    async function loadEquityCurve() {
+      try {
+        const data = await apiFetch('/portfolio/equity-curve');
+        document.getElementById('equity-model').textContent = data.model || '';
+        document.getElementById('equity-period').textContent =
+          `Test period: ${data.period_start.slice(0, 7)} to ${data.period_end.slice(0, 7)} (${data.n_points} periods)`;
+
+        const labels = data.points.map(p => p.date.slice(0, 7));
+        const values = data.points.map(p => p.cumulative_return);
+
+        if (equityChartInst) { equityChartInst.destroy(); equityChartInst = null; }
+        showChart('equity');
+        show('equity-legend');
+
+        equityChartInst = new Chart(document.getElementById('equity-chart'), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              {
+                label: 'Cumulative Return',
+                data: values,
+                borderColor: '#4f8ef7',
+                backgroundColor: 'rgba(79,142,247,0.08)',
+                borderWidth: 2,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                fill: true,
+                tension: 0.2,
+              },
+              {
+                label: 'Baseline (1.0)',
+                data: Array(values.length).fill(1.0),
+                borderColor: '#6b7280',
+                borderWidth: 1,
+                borderDash: [4, 4],
+                pointRadius: 0,
+                fill: false,
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: { color: '#9ca3af', boxWidth: 12, font: { size: 11 } }
+              },
+              tooltip: {
+                callbacks: {
+                  label: ctx => {
+                    if (ctx.datasetIndex !== 0) return null;
+                    const v = ctx.parsed.y;
+                    const pct = ((v - 1) * 100).toFixed(2);
+                    return [` Cumulative: ${v.toFixed(4)}`, ` vs start: ${pct}%`];
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { color: '#2a2d3a' },
+                ticks: {
+                  color: '#9ca3af',
+                  maxTicksLimit: 10,
+                  maxRotation: 0,
+                }
+              },
+              y: {
+                grid: { color: '#2a2d3a' },
+                ticks: { color: '#9ca3af', callback: v => v.toFixed(2) + 'x' },
+              }
+            }
+          }
+        });
+      } catch (e) {
+        setError('equity', e);
+      }
+    }
+
+    // ====================================================================
+    // 4. Portfolio Weights — bar chart
+    // ====================================================================
+    async function loadWeights() {
+      try {
+        const data = await apiFetch('/portfolio/weights');
+        document.getElementById('weights-model').textContent = data.model || '';
+
+        const sorted = [...data.weights].sort((a, b) => b.weight - a.weight);
+        const labels = sorted.map(w => w.ticker.replace('.SA', ''));
+        const values = sorted.map(w => +(w.weight * 100).toFixed(2));
+
+        if (weightsChartInst) { weightsChartInst.destroy(); weightsChartInst = null; }
+        showChart('weights');
+
+        weightsChartInst = new Chart(document.getElementById('weights-chart'), {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [{
+              label: 'Weight (%)',
+              data: values,
+              backgroundColor: values.map((_, i) =>
+                `hsl(${210 + i * 12}, 70%, ${45 + i * 2}%)`
+              ),
+              borderRadius: 3,
+              borderSkipped: false,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: { label: ctx => ` ${ctx.parsed.y.toFixed(2)}%` }
+              }
+            },
+            scales: {
+              x: { grid: { color: '#2a2d3a' }, ticks: { color: '#9ca3af' } },
+              y: {
+                grid: { color: '#2a2d3a' },
+                ticks: { color: '#9ca3af', callback: v => v + '%' },
+                beginAtZero: true,
+              }
+            }
+          }
+        });
+      } catch (e) {
+        setError('weights', e);
+      }
+    }
+
+    // ====================================================================
+    // 4. Efficient Frontier — scatter/line chart
+    // ====================================================================
+    async function loadFrontier() {
+      try {
+        const data = await apiFetch('/portfolio/frontier?n_points=60');
+
+        const points = data.points.map(p => ({
+          x: +(p.volatility * 100).toFixed(4),
+          y: +(p.expected_return * 100).toFixed(4),
+          sharpe: p.sharpe,
+        }));
+        const best = points.reduce((a, b) => (a.sharpe > b.sharpe ? a : b), points[0]);
+
+        if (frontierChartInst) { frontierChartInst.destroy(); frontierChartInst = null; }
+        showChart('frontier');
+        show('frontier-legend');
+
+        frontierChartInst = new Chart(document.getElementById('frontier-chart'), {
+          type: 'scatter',
+          data: {
+            datasets: [
+              {
+                label: 'Frontier',
+                data: points,
+                showLine: true,
+                tension: 0.3,
+                borderColor: '#4f8ef7',
+                backgroundColor: 'rgba(79,142,247,0.06)',
+                borderWidth: 2,
+                pointRadius: 2,
+                pointHoverRadius: 4,
+                fill: true,
+              },
+              {
+                label: 'Max Sharpe',
+                data: [best],
+                pointRadius: 6,
+                pointBackgroundColor: '#22c55e',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 1.5,
+                showLine: false,
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: { color: '#9ca3af', boxWidth: 12, font: { size: 11 } }
+              },
+              tooltip: {
+                callbacks: {
+                  label: ctx => {
+                    const p = ctx.raw;
+                    return [
+                      ` Vol: ${p.x.toFixed(3)}%`,
+                      ` Ret: ${p.y.toFixed(3)}%`,
+                      ` Sharpe: ${(p.sharpe || 0).toFixed(3)}`,
+                    ];
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                title: { display: true, text: 'Volatility (%)', color: '#6b7280' },
+                grid: { color: '#2a2d3a' },
+                ticks: { color: '#9ca3af', callback: v => v + '%' },
+              },
+              y: {
+                title: { display: true, text: 'Expected Return (%)', color: '#6b7280' },
+                grid: { color: '#2a2d3a' },
+                ticks: { color: '#9ca3af', callback: v => v + '%' },
+              }
+            }
+          }
+        });
+      } catch (e) {
+        setError('frontier', e);
+      }
+    }
+
+    // ====================================================================
+    // 5. Predictions table
+    // ====================================================================
+    async function loadPredictions() {
+      try {
+        const data = await apiFetch('/predictions');
+        document.getElementById('pred-model').textContent = data.model || '';
+
+        const sorted = [...data.predictions].sort(
+          (a, b) => b.predicted_return - a.predicted_return
+        );
+
+        const tbody = document.getElementById('pred-body');
+        tbody.innerHTML = sorted.map((p, i) => {
+          const pct  = fmtPct(p.predicted_return);
+          const pos  = p.predicted_return >= 0;
+          const rank = i === 0
+            ? ' text-green-400 font-semibold'
+            : (i === sorted.length - 1 ? ' text-red-400' : '');
+          return `
+            <tr class="hover:bg-border/30 transition-colors">
+              <td class="py-2 pr-4 text-white font-medium">${p.ticker.replace('.SA', '')}</td>
+              <td class="py-2 pr-4 text-right${rank} ${pos ? 'text-green-300' : 'text-red-300'}">${pct}</td>
+              <td class="py-2 text-right text-muted">${p.model}</td>
+            </tr>`;
+        }).join('');
+
+        showTable('pred');
+      } catch (e) {
+        setError('pred', e);
+      }
+    }
+
+    // ====================================================================
+    // 6. History table
+    // ====================================================================
+    async function loadHistory() {
+      try {
+        const data = await apiFetch('/history/runs?limit=20');
+        document.getElementById('history-count').textContent =
+          data.count + ' record' + (data.count !== 1 ? 's' : '');
+
+        const STATUS_CLASSES = {
+          completed: 'text-green-400',
+          failed:    'text-red-400',
+          running:   'text-yellow-400',
+        };
+
+        const tbody = document.getElementById('history-body');
+        if (!data.runs || data.runs.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-muted">No runs found.</td></tr>`;
+        } else {
+          tbody.innerHTML = data.runs.map(r => {
+            const sc = STATUS_CLASSES[r.status] || 'text-muted';
+            const ts = r.started_at ? r.started_at.replace('T', ' ').slice(0, 16) : '--';
+            return `
+              <tr class="hover:bg-border/30 transition-colors">
+                <td class="py-2 pr-3 text-muted font-mono text-xs">${ts}</td>
+                <td class="py-2 pr-3 ${sc}">${r.status}</td>
+                <td class="py-2 pr-3 text-white">${r.model || '--'}</td>
+                <td class="py-2 pr-3 text-right text-accent">${r.sharpe != null ? fmt(r.sharpe, 3) : '--'}</td>
+                <td class="py-2 text-right">${r.annualized_return != null ? fmtPct(r.annualized_return) : '--'}</td>
+              </tr>`;
+          }).join('');
+        }
+
+        showTable('history');
+      } catch (e) {
+        hide('history-loading');
+        const el = document.getElementById('history-error');
+        el.textContent = 'Could not load history: ' + e.message;
+        el.classList.remove('hidden');
+      }
+    }
+
+    // ====================================================================
+    // 7. Scheduler status
+    // ====================================================================
+    async function loadScheduler() {
+      try {
+        const [schedResult, histResult] = await Promise.allSettled([
+          apiFetch('/scheduler/status'),
+          apiFetch('/history/runs?limit=1'),
+        ]);
+
+        if (schedResult.status === 'rejected') throw schedResult.reason;
+        const data = schedResult.value;
+
+        document.getElementById('sched-state').textContent = data.running ? 'Running' : 'Stopped';
+        document.getElementById('sched-state').className = 'text-sm font-semibold ' +
+          (data.running ? 'text-green-400' : 'text-red-400');
+        document.getElementById('sched-enabled').textContent = data.enabled ? 'Yes' : 'No';
+        document.getElementById('sched-enabled').className = 'text-sm font-semibold ' +
+          (data.enabled ? 'text-white' : 'text-muted');
+        document.getElementById('sched-jobs').textContent = data.job_count;
+
+        const nextRun = data.jobs && data.jobs.length > 0 && data.jobs[0].next_run_time
+          ? data.jobs[0].next_run_time.replace('T', ' ').slice(0, 16)
+          : 'N/A';
+        document.getElementById('sched-next').textContent = nextRun;
+
+        let lastRunText = '--';
+        if (histResult.status === 'fulfilled') {
+          const runs = histResult.value.runs;
+          if (runs && runs.length > 0 && runs[0].started_at) {
+            lastRunText = runs[0].started_at.replace('T', ' ').slice(0, 16);
+          }
+        }
+        document.getElementById('sched-last-run').textContent = lastRunText;
+
+        if (data.jobs && data.jobs.length > 0) {
+          document.getElementById('sched-triggers').innerHTML = data.jobs.map(j => `
+            <div class="text-xs text-muted">
+              <span class="text-white">${j.id}</span>
+              &mdash; ${j.trigger}
+            </div>`).join('');
+        }
+
+        hide('scheduler-loading');
+        show('scheduler-card');
+      } catch (e) {
+        hide('scheduler-loading');
+        const el = document.getElementById('scheduler-error');
+        el.textContent = 'Could not load scheduler status: ' + e.message;
+        el.classList.remove('hidden');
+      }
+    }
+
+    // ====================================================================
+    // Auto-refresh
+    // ====================================================================
+    function updateCountdown() {
+      const el = document.getElementById('refresh-countdown');
+      if (el) el.textContent = `Refreshing in ${countdownValue}s`;
+    }
+
+    function startCountdown() {
+      if (countdownTimer) clearInterval(countdownTimer);
+      countdownValue = REFRESH_INTERVAL;
+      updateCountdown();
+      countdownTimer = setInterval(() => {
+        countdownValue--;
+        updateCountdown();
+        if (countdownValue <= 0) {
+          clearInterval(countdownTimer);
+          countdownTimer = null;
+          refreshAll();
+        }
+      }, 1000);
+    }
+
+    async function refreshAll() {
+      resetSection('equity', 'chart');
+      hide('equity-legend');
+      resetSection('weights', 'chart');
+      resetSection('frontier', 'chart');
+      hide('frontier-legend');
+      resetSection('pred', 'table');
+      resetSection('history', 'table');
+      resetSection('scheduler', 'card');
+
+      document.getElementById('footer-ts').textContent =
+        'Last loaded: ' + new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+
+      await Promise.all([
+        loadHealth(),
+        loadSummary(),
+        loadEquityCurve(),
+        loadWeights(),
+        loadFrontier(),
+        loadPredictions(),
+        loadHistory(),
+        loadScheduler(),
+      ]);
+
+      startCountdown();
+    }
+
+    // ====================================================================
+    // Bootstrap
+    // ====================================================================
+    document.getElementById('footer-ts').textContent =
+      'Last loaded: ' + new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+
+    Promise.all([
+      loadHealth(),
+      loadSummary(),
+      loadEquityCurve(),
+      loadWeights(),
+      loadFrontier(),
+      loadPredictions(),
+      loadHistory(),
+      loadScheduler(),
+    ]).then(() => startCountdown());
+  </script>
+</body>
+</html>

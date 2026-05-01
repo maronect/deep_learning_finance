@@ -1,6 +1,7 @@
 numpy
 scipy
 pandas
+pyyaml
 matplotlib
 seaborn
 tikzplotlib
@@ -11,3 +12,7 @@ dash
 plotly
 ipykernel
 pytest
+fastapi
+uvicorn[standard]
+joblib
+apscheduler>=3.10

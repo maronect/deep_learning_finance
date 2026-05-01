@@ -1,0 +1,85 @@
+{
+  "run_id": "20260417T013534",
+  "started_at": "2026-04-17T01:35:34.605803",
+  "status": "completed",
+  "error": null,
+  "selected_assets": [
+    "PETR3.SA",
+    "WEGE3.SA",
+    "TOTS3.SA",
+    "VALE3.SA",
+    "CSNA3.SA",
+    "RADL3.SA",
+    "PCAR3.SA",
+    "VIVT3.SA",
+    "ABEV3.SA",
+    "MRVE3.SA"
+  ],
+  "artifacts_written": [
+    "artifacts/data/20260417T013534_returns.csv",
+    "artifacts/data/20260417T013534_features.csv",
+    "artifacts/data/20260417T013534_targets.csv",
+    "artifacts/models/20260417T013534_ridge.joblib",
+    "artifacts/predictions/20260417T013534_ridge_predictions.csv",
+    "artifacts/weights/20260417T013534_ridge_weights.csv",
+    "artifacts/metrics/20260417T013534_ridge_metrics.csv",
+    "artifacts/runs/20260417T013534_manifest.json"
+  ],
+  "pipeline_cfg": {
+    "data": {
+      "tickers": [],
+      "start_date": "2010-01-01",
+      "end_date": "2025-12-31",
+      "frequency": "monthly"
+    },
+    "asset_selection": {
+      "method": "stable_corr_pairs",
+      "n_assets": 10,
+      "min_data_coverage": 0.85
+    },
+    "features": {
+      "lag_window": 24,
+      "min_history": 36
+    },
+    "models": {
+      "default": "ridge",
+      "blend_alpha": 0.3,
+      "train_ratio": 0.7
+    },
+    "optimization": {
+      "risk_free_rate": 0.15,
+      "frequency": "monthly",
+      "solver": "SLSQP",
+      "weight_bounds": [
+        0.0,
+        1.0
+      ]
+    },
+    "evaluation": {
+      "metrics": [
+        "sharpe_ratio",
+        "annualized_return",
+        "annualized_volatility",
+        "cumulative_return"
+      ]
+    },
+    "artifacts": {
+      "base_dir": "artifacts",
+      "data_dir": "artifacts/data",
+      "models_dir": "artifacts/models",
+      "predictions_dir": "artifacts/predictions",
+      "metrics_dir": "artifacts/metrics",
+      "weights_dir": "artifacts/weights",
+      "runs_dir": "artifacts/runs"
+    }
+  },
+  "metrics": {
+    "Model": "ridge",
+    "Sharpe": -0.1962430460854904,
+    "Annualized_Return": 0.10933183894444998,
+    "Annualized_Volatility": 0.18533777439365653,
+    "Cumulative_Return": 1.448781316912544,
+    "Mean_Return": 0.008683979469710333,
+    "Volatility": 0.05350240696859187
+  }
+}

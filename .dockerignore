@@ -1,6 +1,55 @@
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# Python bytecode
 __pycache__/
+**/__pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# Environment and secrets
 .env
+.env.*
+*.env
+
+# Jupyter
 .ipynb_checkpoints/
-data/
+**/.ipynb_checkpoints/
+
+# Notebook-only code and outputs (not needed at runtime)
+notebooks/
 outputs/
+article_official/
+
+# Artifacts — populated at runtime via volume mount
+artifacts/
+
+# Dev/test files
+tests/
+requirements-dev.txt
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Documentation
+*.md
+LICENSE
+
+# Build artifacts
+dist/
+*.egg-info/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "deep-learning-finance"
+version = "0.1.0"
+description = "ML Engineering project for portfolio optimization on B3 stocks"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+# Legacy files preserved for notebook compatibility — not subject to linting.
+exclude = [
+    "src/data/",
+    "src/models/lr.py",
+    "src/models/rnn.py",
+    "src/utils/visualization.py",
+    "notebooks/",
+]

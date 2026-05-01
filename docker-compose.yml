@@ -1,0 +1,31 @@
+## Docker Compose for local development and deployment
+## Usage: docker compose up
+
+services:
+  api:
+    container_name: dlfinance-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist pipeline artifacts (CSVs, models, SQLite DB) outside the container.
+      - ./artifacts:/app/artifacts
+      # Mount config so changes can be applied without rebuilding the image.
+      - ./config:/app/config
+    environment:
+      PYTHONPATH: /app
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

@@ -1,8 +1,14 @@
 """
-Módulo para exportar resultados em CSV.
+Functions for persisting pipeline artifacts to disk.
+
+All pipeline outputs (returns, features, model params, predictions, weights,
+metrics) are saved here. No ad-hoc CSV writes anywhere else in src/.
 """
-import pandas as pd
+from __future__ import annotations
+
+import joblib
 import numpy as np
+import pandas as pd
 from pathlib import Path
 
 
@@ -89,7 +95,7 @@ def save_all_metrics_comparison(
 ):
     """
     Salva comparação de todas as métricas dos modelos.
-    
+
     Parâmetros:
     -----------
     metrics_list : list
@@ -101,4 +107,85 @@ def save_all_metrics_comparison(
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(save_path, index=False)
     print(f"Comparação de métricas salva em: {save_path}")
+
+
+def save_returns(
+    returns: pd.DataFrame,
+    save_path: str,
+) -> None:
+    """Persist processed historical returns to CSV.
+
+    Args:
+        returns: DataFrame of asset returns indexed by date.
+        save_path: Destination file path (including filename).
+    """
+    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+    returns.to_csv(save_path)
+    print(f"Returns saved: {save_path}")
+
+
+def save_features(
+    X: pd.DataFrame,
+    y: pd.DataFrame,
+    X_path: str,
+    y_path: str,
+) -> None:
+    """Persist feature matrix and target matrix to CSV.
+
+    Args:
+        X: Feature DataFrame (lag features), indexed by date.
+        y: Target DataFrame (forward returns), indexed by date.
+        X_path: Destination path for the feature matrix.
+        y_path: Destination path for the target matrix.
+    """
+    Path(X_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(y_path).parent.mkdir(parents=True, exist_ok=True)
+    X.to_csv(X_path)
+    y.to_csv(y_path)
+    print(f"Features saved: {X_path}")
+    print(f"Targets saved:  {y_path}")
+
+
+def save_model(
+    model: object,
+    save_path: str,
+) -> None:
+    """Persist a trained sklearn model to disk using joblib.
+
+    Args:
+        model: Fitted model object (e.g. RidgeReturnModel or MLPReturnModel).
+        save_path: Destination file path (should end in .joblib).
+    """
+    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, save_path)
+    print(f"Model saved: {save_path}")
+
+
+def load_model(load_path: str) -> object:
+    """Load a previously saved model from disk.
+
+    Args:
+        load_path: Path to the .joblib file written by save_model().
+
+    Returns:
+        The deserialized model object.
+    """
+    return joblib.load(load_path)
+
+
+def save_equity_curve(
+    portfolio_returns: pd.Series,
+    save_path: str,
+) -> None:
+    """Persist portfolio equity curve (cumulative returns over the test period) to CSV.
+
+    Args:
+        portfolio_returns: Period returns indexed by date (out-of-sample test period).
+        save_path: Destination file path.
+    """
+    equity = (1 + portfolio_returns).cumprod()
+    df = pd.DataFrame({"date": equity.index.astype(str), "cumulative_return": equity.values})
+    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(save_path, index=False)
+    print(f"Equity curve saved: {save_path}")
 
