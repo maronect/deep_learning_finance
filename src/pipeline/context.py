@@ -23,6 +23,10 @@ class PipelineContext:
     to each stage function. Stages read from fields populated by prior stages
     and write their outputs into new fields.
 
+    Multi-model fields (blended_mu, weights, metrics, etc.) are keyed by model
+    name. The "markowitz" key is always present after stage_optimize_portfolio
+    as the classical baseline (no ML, historical mean as mu).
+
     Args:
         pipeline_cfg: Loaded content of config/pipeline.yaml.
         models_cfg: Loaded content of config/models.yaml.
@@ -50,18 +54,24 @@ class PipelineContext:
     walk_forward_splits: Optional[list[dict[str, int]]] = field(default=None)
 
     # Stage 4: Training and prediction
-    ml_predictions: Optional[pd.Series] = field(default=None)
+    # ml_predictions and blended_mu are keyed by ML model name (e.g. "ridge", "mlp").
+    # historical_means is a single Series shared by all models.
+    ml_predictions: Optional[dict[str, pd.Series]] = field(default=None)
     historical_means: Optional[pd.Series] = field(default=None)
-    blended_mu: Optional[pd.Series] = field(default=None)
+    blended_mu: Optional[dict[str, pd.Series]] = field(default=None)
 
     # Stage 5: Optimization
+    # weights and weights_series are keyed by model name, including "markowitz".
     cov_matrix: Optional[pd.DataFrame] = field(default=None)
-    weights: Optional[np.ndarray] = field(default=None)
-    weights_series: Optional[pd.Series] = field(default=None)
+    weights: Optional[dict[str, np.ndarray]] = field(default=None)
+    weights_series: Optional[dict[str, pd.Series]] = field(default=None)
 
     # Stage 6: Evaluation
-    portfolio_returns: Optional[pd.Series] = field(default=None)
-    metrics: Optional[dict[str, Any]] = field(default=None)
+    # Both dicts keyed by model name (including "markowitz").
+    portfolio_returns: Optional[dict[str, pd.Series]] = field(default=None)
+    metrics: Optional[dict[str, dict[str, Any]]] = field(default=None)
+    # model_metrics is only populated for ML models (not "markowitz").
+    model_metrics: Optional[dict[str, dict[str, Any]]] = field(default=None)
 
     # Stage 7: Export
     artifacts_written: list[str] = field(default_factory=list)

@@ -173,6 +173,22 @@ def load_model(load_path: str) -> object:
     return joblib.load(load_path)
 
 
+def save_model_metrics(
+    metrics_dict: dict,
+    save_path: str,
+) -> None:
+    """Persist model prediction quality metrics (IC, ICIR, hit rate, etc.) to CSV.
+
+    Args:
+        metrics_dict: Dict with keys ic, icir, hit_rate, spearman_ic, mae, mse, r2.
+        save_path: Destination file path.
+    """
+    df = pd.DataFrame([metrics_dict])
+    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(save_path, index=False)
+    print(f"Model metrics saved: {save_path}")
+
+
 def save_equity_curve(
     portfolio_returns: pd.Series,
     save_path: str,
