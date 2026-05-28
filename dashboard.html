@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" /> 
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='12' fill='%234f8ef7'/><polyline points='15,70 35,45 55,58 80,25'              
+  <meta charset="UTF-8" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='12' fill='%234f8ef7'/><polyline points='15,70 35,45 55,58 80,25'
   stroke='white' stroke-width='10' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Deep Learning Finance — Portfolio Dashboard</title>
@@ -51,6 +51,17 @@
     ::-webkit-scrollbar-track { background: #1a1d27; }
     ::-webkit-scrollbar-thumb { background: #2a2d3a; border-radius: 3px; }
     canvas { display: block; }
+    .model-tab-active {
+      background: rgba(79,142,247,0.15);
+      color: #4f8ef7;
+      border-color: rgba(79,142,247,0.5);
+      font-weight: 500;
+    }
+    .model-tab-inactive {
+      color: #6b7280;
+      border-color: #2a2d3a;
+    }
+    .model-tab-inactive:hover { color: #e5e7eb; }
   </style>
 </head>
 <body class="text-gray-100 min-h-screen font-mono">
@@ -63,7 +74,7 @@
       <span class="text-sm text-muted uppercase tracking-widest">ML Engineering</span>
       <h1 class="text-xl font-semibold text-white mt-0.5">Deep Learning Finance</h1>
       <p class="text-xs text-muted mt-0.5">Brazilian Equity Portfolio Optimization — B3 2010-2025</p>
-      <p class="text-xs text-muted mt-1">ML-driven portfolio optimization using Ridge Regression + Markowitz framework on 10 Brazilian equities (B3).</p>
+      <p class="text-xs text-muted mt-1">Comparing Ridge Regression, MLP, and Classical Markowitz on 10 Brazilian equities (B3).</p>
       <p class="text-xs text-yellow-500/70 mt-1">[!] For educational and research purposes only. Not financial advice.</p>
     </div>
     <div class="text-right">
@@ -81,41 +92,17 @@
   <main class="px-6 py-6 space-y-6 max-w-screen-xl mx-auto">
 
     <!-- ================================================================
-         METRIC CARDS
+         MODEL COMPARISON CARDS
     ================================================================ -->
     <section>
-      <h2 class="text-xs text-muted uppercase tracking-widest mb-3">Portfolio Metrics</h2>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-
-        <div class="bg-panel border border-accent/30 rounded-lg p-4 flex flex-col">
-          <p class="text-xs text-muted mb-1">Sharpe Ratio</p>
-          <p id="card-sharpe" class="text-4xl font-semibold text-accent leading-none mb-3">--</p>
-          <p class="text-xs text-muted leading-snug mt-auto">Risk-adjusted return</p>
-        </div>
-
-        <div class="bg-panel border border-border rounded-lg p-4 flex flex-col">
-          <p class="text-xs text-muted mb-1">Annualized Return</p>
-          <p id="card-return" class="text-2xl font-semibold text-white mb-2">--</p>
-          <p class="text-xs text-muted leading-snug mt-auto">Expected yearly portfolio gain</p>
-        </div>
-
-        <div class="bg-panel border border-border rounded-lg p-4 flex flex-col">
-          <p class="text-xs text-muted mb-1">Annualized Volatility</p>
-          <p id="card-volatility" class="text-2xl font-semibold text-white mb-2">--</p>
-          <p class="text-xs text-muted leading-snug mt-auto">Annualized standard deviation of returns</p>
-        </div>
-
-        <div class="bg-panel border border-border rounded-lg p-4 flex flex-col">
-          <p class="text-xs text-muted mb-1">Cumulative Return</p>
-          <p id="card-cumulative" class="text-2xl font-semibold text-white mb-2">--</p>
-          <p class="text-xs text-muted leading-snug mt-auto">Total return over the full period</p>
-        </div>
-
-      </div>
+      <h2 class="text-xs text-muted uppercase tracking-widest mb-3">Model Comparison</h2>
+      <div id="compare-loading" class="skeleton h-44 w-full rounded-lg"></div>
+      <div id="compare-error" class="hidden text-xs mt-2"></div>
+      <div id="compare-cards" class="hidden grid grid-cols-1 md:grid-cols-3 gap-4"></div>
     </section>
 
     <!-- ================================================================
-         EQUITY CURVE
+         EQUITY CURVE — all models overlaid
     ================================================================ -->
     <section>
       <div class="bg-panel border border-border rounded-lg p-5">
@@ -124,7 +111,7 @@
             <h2 class="text-sm font-semibold text-white">Portfolio Performance &mdash; Out-of-Sample Test Period</h2>
             <p id="equity-period" class="text-xs text-muted mt-0.5"></p>
           </div>
-          <span id="equity-model" class="text-xs text-muted bg-border px-2 py-0.5 rounded"></span>
+          <div id="equity-models-label" class="flex gap-3 flex-wrap justify-end items-center"></div>
         </div>
         <div id="equity-loading" class="skeleton h-56 w-full"></div>
         <div id="equity-error" class="hidden text-xs mt-2"></div>
@@ -132,98 +119,107 @@
           <canvas id="equity-chart" height="220"></canvas>
         </div>
         <p id="equity-legend" class="hidden text-xs text-muted mt-3 leading-snug">
-          Cumulative portfolio return starting at 1.0 on the first test period. A value of 1.5 means +50% since the start of the test period. The dashed line marks the break-even level.
+          Cumulative portfolio return starting at 1.0. A value of 1.5 means +50% since the start of the test period.
+          Markowitz (dashed) is the classical baseline without ML predictions.
         </p>
       </div>
     </section>
 
     <!-- ================================================================
-         CHARTS ROW
+         STRATEGY DETAIL — shared model selector
     ================================================================ -->
-    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-      <!-- Portfolio Weights -->
-      <div class="bg-panel border border-border rounded-lg p-5">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-sm font-semibold text-white">Portfolio Weights</h2>
-          <span id="weights-model" class="text-xs text-muted bg-border px-2 py-0.5 rounded"></span>
-        </div>
-        <div id="weights-loading" class="skeleton h-52 w-full"></div>
-        <div id="weights-error" class="hidden text-xs mt-2"></div>
-        <div id="weights-chart-wrap" class="hidden">
-          <canvas id="weights-chart" height="210"></canvas>
-        </div>
+    <section>
+      <!-- Shared model selector -->
+      <div class="flex items-center gap-4 mb-4">
+        <span class="text-xs text-muted uppercase tracking-widest shrink-0">Strategy</span>
+        <div id="global-model-tabs" class="flex gap-1"></div>
+        <span id="strategy-loading-hint" class="hidden text-xs text-muted">loading...</span>
       </div>
 
-      <!-- Efficient Frontier -->
-      <div class="bg-panel border border-border rounded-lg p-5">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-sm font-semibold text-white">Efficient Frontier</h2>
-          <span class="text-xs text-muted">x = Volatility, y = Expected Return</span>
+      <!-- Weights + Frontier -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+        <!-- Portfolio Weights -->
+        <div class="bg-panel border border-border rounded-lg p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm font-semibold text-white">Portfolio Weights</h2>
+            <span id="weights-model-badge" class="text-xs text-muted bg-border px-2 py-0.5 rounded"></span>
+          </div>
+          <div id="weights-loading" class="skeleton h-52 w-full"></div>
+          <div id="weights-error" class="hidden text-xs mt-2"></div>
+          <div id="weights-chart-wrap" class="hidden">
+            <canvas id="weights-chart" height="210"></canvas>
+          </div>
         </div>
-        <div id="frontier-loading" class="skeleton h-52 w-full"></div>
-        <div id="frontier-error" class="hidden text-xs mt-2"></div>
-        <div id="frontier-chart-wrap" class="hidden">
-          <canvas id="frontier-chart" height="210"></canvas>
+
+        <!-- Efficient Frontier -->
+        <div class="bg-panel border border-border rounded-lg p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm font-semibold text-white">Efficient Frontier</h2>
+            <span id="frontier-model-badge" class="text-xs text-muted bg-border px-2 py-0.5 rounded"></span>
+          </div>
+          <div id="frontier-loading" class="skeleton h-52 w-full"></div>
+          <div id="frontier-error" class="hidden text-xs mt-2"></div>
+          <div id="frontier-chart-wrap" class="hidden">
+            <canvas id="frontier-chart" height="210"></canvas>
+          </div>
+          <p id="frontier-legend" class="hidden text-xs text-muted mt-3 leading-snug">
+            Each point is a portfolio. Green dot = max Sharpe. Curve shape changes with model predictions.
+          </p>
         </div>
-        <p id="frontier-legend" class="hidden text-xs text-muted mt-3 leading-snug">
-          Each point represents a portfolio. The green dot is the allocation with the highest Sharpe ratio.
-        </p>
+
       </div>
 
-    </section>
+      <!-- Predictions + History -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-    <!-- ================================================================
-         TABLES ROW
-    ================================================================ -->
-    <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Expected Returns (Predictions) -->
+        <div class="bg-panel border border-border rounded-lg p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm font-semibold text-white">Expected Returns by Asset</h2>
+            <span id="pred-model" class="text-xs text-muted bg-border px-2 py-0.5 rounded"></span>
+          </div>
+          <div id="pred-loading" class="skeleton h-48 w-full"></div>
+          <div id="pred-error" class="hidden text-xs mt-2"></div>
+          <div id="pred-table-wrap" class="hidden table-wrap">
+            <table class="w-full text-xs">
+              <thead class="bg-panel">
+                <tr class="text-left text-muted border-b border-border">
+                  <th class="pb-2 pr-4">Ticker</th>
+                  <th class="pb-2 pr-4 text-right">Predicted Return</th>
+                  <th class="pb-2 text-right">Model</th>
+                </tr>
+              </thead>
+              <tbody id="pred-body" class="divide-y divide-border"></tbody>
+            </table>
+          </div>
+        </div>
 
-      <!-- Predictions -->
-      <div class="bg-panel border border-border rounded-lg p-5">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-sm font-semibold text-white">Expected Returns by Asset</h2>
-          <span id="pred-model" class="text-xs text-muted bg-border px-2 py-0.5 rounded"></span>
+        <!-- Run History -->
+        <div class="bg-panel border border-border rounded-lg p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm font-semibold text-white">Execution History</h2>
+            <span id="history-count" class="text-xs text-muted"></span>
+          </div>
+          <div id="history-loading" class="skeleton h-48 w-full"></div>
+          <div id="history-error" class="hidden text-xs text-red-400 mt-2"></div>
+          <div id="history-table-wrap" class="hidden table-wrap">
+            <table class="w-full text-xs">
+              <thead class="bg-panel">
+                <tr class="text-left text-muted border-b border-border">
+                  <th class="pb-2 pr-3">Started</th>
+                  <th class="pb-2 pr-3">Status</th>
+                  <th class="pb-2 pr-3">Best Model</th>
+                  <th class="pb-2 pr-3 text-right">Sharpe</th>
+                  <th class="pb-2 text-right">Ann. Return</th>
+                </tr>
+              </thead>
+              <tbody id="history-body" class="divide-y divide-border"></tbody>
+            </table>
+          </div>
         </div>
-        <div id="pred-loading" class="skeleton h-48 w-full"></div>
-        <div id="pred-error" class="hidden text-xs mt-2"></div>
-        <div id="pred-table-wrap" class="hidden table-wrap">
-          <table class="w-full text-xs">
-            <thead class="bg-panel">
-              <tr class="text-left text-muted border-b border-border">
-                <th class="pb-2 pr-4">Ticker</th>
-                <th class="pb-2 pr-4 text-right">Predicted Return</th>
-                <th class="pb-2 text-right">Model</th>
-              </tr>
-            </thead>
-            <tbody id="pred-body" class="divide-y divide-border"></tbody>
-          </table>
-        </div>
+
       </div>
-
-      <!-- Run History -->
-      <div class="bg-panel border border-border rounded-lg p-5">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-sm font-semibold text-white">Execution History</h2>
-          <span id="history-count" class="text-xs text-muted"></span>
-        </div>
-        <div id="history-loading" class="skeleton h-48 w-full"></div>
-        <div id="history-error" class="hidden text-xs text-red-400 mt-2"></div>
-        <div id="history-table-wrap" class="hidden table-wrap">
-          <table class="w-full text-xs">
-            <thead class="bg-panel">
-              <tr class="text-left text-muted border-b border-border">
-                <th class="pb-2 pr-3">Started</th>
-                <th class="pb-2 pr-3">Status</th>
-                <th class="pb-2 pr-3">Model</th>
-                <th class="pb-2 pr-3 text-right">Sharpe</th>
-                <th class="pb-2 text-right">Ann. Return</th>
-              </tr>
-            </thead>
-            <tbody id="history-body" class="divide-y divide-border"></tbody>
-          </table>
-        </div>
-      </div>
-
     </section>
 
     <!-- ================================================================
@@ -283,19 +279,35 @@
     // ====================================================================
     // Config
     // ====================================================================
-    const BASE = 'https://dlfinance-api.fly.dev';
+    // Auto-detect API base: use localhost when opened locally, Fly.io in production.
+    const BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? `http://${window.location.host}`
+      : 'https://dlfinance-api.fly.dev';
     const REFRESH_INTERVAL = 60;
 
     Chart.defaults.color = '#6b7280';
     Chart.defaults.font.family = 'ui-monospace, SFMono-Regular, monospace';
     Chart.defaults.font.size = 11;
 
-    let weightsChartInst = null;
+    // Chart instances
+    let weightsChartInst  = null;
     let frontierChartInst = null;
-    let equityChartInst = null;
+    let equityChartInst   = null;
 
+    // Countdown
     let countdownTimer = null;
     let countdownValue = REFRESH_INTERVAL;
+
+    // State
+    let compareData       = null;  // response from /portfolio/compare
+    let activeGlobalModel = null;  // currently selected model tab
+    // Per-model cache: { ridge: { frontier: data, predictions: data }, mlp: {...}, markowitz: {...} }
+    let modelCache = {};
+
+    // Model display constants
+    const MODEL_LABELS = { ridge: 'Ridge', mlp: 'MLP', markowitz: 'Markowitz' };
+    const MODEL_COLORS = { ridge: '#4f8ef7', mlp: '#a78bfa', markowitz: '#94a3b8' };
+    const MODEL_HUES   = { ridge: 210, mlp: 270, markowitz: 160 };
 
     // ====================================================================
     // Utilities
@@ -369,8 +381,55 @@
       if (errEl) errEl.classList.add('hidden');
       if (type === 'chart') hide(prefix + '-chart-wrap');
       if (type === 'table') hide(prefix + '-table-wrap');
-      if (type === 'card') hide(prefix + '-card');
+      if (type === 'card')  hide(prefix + '-card');
       show(prefix + '-loading');
+    }
+
+    // ====================================================================
+    // Model tab management
+    // ====================================================================
+    function updateGlobalTabs(activeModel) {
+      document.querySelectorAll('[data-model-tab]').forEach(btn => {
+        const m = btn.dataset.modelTab;
+        if (m === activeModel) {
+          btn.classList.add('model-tab-active');
+          btn.classList.remove('model-tab-inactive');
+        } else {
+          btn.classList.remove('model-tab-active');
+          btn.classList.add('model-tab-inactive');
+        }
+      });
+    }
+
+    async function handleModelTab(model) {
+      if (activeGlobalModel === model) return;
+      await setActiveModel(model);
+    }
+
+    // Drives all strategy-detail sections: weights, frontier, predictions
+    async function setActiveModel(model) {
+      activeGlobalModel = model;
+      updateGlobalTabs(model);
+
+      // Update badges
+      const label = MODEL_LABELS[model] || model;
+      const badge = document.getElementById('weights-model-badge');
+      if (badge) badge.textContent = label;
+      const fbadge = document.getElementById('frontier-model-badge');
+      if (fbadge) fbadge.textContent = label;
+
+      // Weights is instant (data already in compareData)
+      renderWeightsChart(model);
+
+      // Show loading state only if not yet cached
+      if (!modelCache[model]?.frontier) resetSection('frontier', 'chart');
+      if (!modelCache[model]?.predictions) resetSection('pred', 'table');
+
+      // Fetch in parallel (cached calls are instant)
+      await Promise.all([
+        loadFrontierForModel(model),
+        loadPredictionsForModel(model),
+      ]);
     }
 
     // ====================================================================
@@ -394,34 +453,387 @@
     }
 
     // ====================================================================
-    // 2. Metrics cards
+    // 2. Model Comparison cards + strategy tab setup
     // ====================================================================
-    async function loadSummary() {
+    async function loadCompare() {
       try {
-        const metrics = await apiFetch('/metrics/portfolio');
-        document.getElementById('card-sharpe').textContent    = fmt(metrics.sharpe, 3);
-        document.getElementById('card-return').textContent    = fmtPct(metrics.annualized_return);
-        document.getElementById('card-volatility').textContent = fmtPct(
-          metrics.annualized_volatility ?? metrics.volatility
-        );
-        document.getElementById('card-cumulative').textContent = fmtPct(metrics.cumulative_return);
+        compareData = await apiFetch('/portfolio/compare');
+        const { comparison, primary_model, models } = compareData;
+
+        // Build global model tabs
+        const tabsEl = document.getElementById('global-model-tabs');
+        tabsEl.innerHTML = models.map(m => {
+          const color = MODEL_COLORS[m] || '#9ca3af';
+          const label = MODEL_LABELS[m] || m;
+          return `<button data-model-tab="${m}" onclick="handleModelTab('${m}')"
+            class="text-xs px-3 py-1 rounded border model-tab-inactive transition-colors flex items-center gap-1.5">
+            <span class="inline-block w-2 h-2 rounded-full shrink-0" style="background:${color}"></span>${label}
+          </button>`;
+        }).join('');
+
+        // Build comparison cards
+        const grid = document.getElementById('compare-cards');
+        grid.innerHTML = models.map(m => {
+          const item = comparison[m];
+          if (!item) return '';
+          const isPrimary  = m === primary_model;
+          const color      = MODEL_COLORS[m] || '#9ca3af';
+          const label      = MODEL_LABELS[m] || m;
+          const borderCls  = isPrimary ? 'border-accent/40' : 'border-border';
+
+          const sharpeVal = item.sharpe != null ? fmt(item.sharpe, 3) : '--';
+          const annRet    = item.annualized_return != null ? fmtPct(item.annualized_return) : '--';
+          const annVol    = item.annualized_volatility != null ? fmtPct(item.annualized_volatility) : '--';
+          const cumRet    = item.cumulative_return != null ? fmtPct(item.cumulative_return) : '--';
+
+          let mlSection = '';
+          if (m !== 'markowitz') {
+            const ic      = item.ic != null ? fmt(item.ic, 3) : '--';
+            const icir    = item.icir != null ? fmt(item.icir, 3) : '--';
+            const hitRate = item.hit_rate != null ? fmtPct(item.hit_rate) : '--';
+            mlSection = `
+              <div class="border-t border-border mt-3 pt-3 space-y-1.5">
+                <p class="text-xs text-muted mb-1">ML Diagnostics</p>
+                <div class="flex justify-between">
+                  <span class="text-xs text-muted">IC</span>
+                  <span class="text-xs text-white">${ic}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-xs text-muted">ICIR</span>
+                  <span class="text-xs text-white">${icir}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-xs text-muted">Hit Rate</span>
+                  <span class="text-xs text-white">${hitRate}</span>
+                </div>
+              </div>`;
+          } else {
+            mlSection = `
+              <div class="border-t border-border mt-3 pt-3">
+                <p class="text-xs text-muted italic">Classical baseline — historical means, no ML</p>
+              </div>`;
+          }
+
+          return `
+            <div class="bg-panel border ${borderCls} rounded-lg p-4 flex flex-col">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                  <span class="inline-block w-2.5 h-2.5 rounded-full shrink-0" style="background:${color}"></span>
+                  <h3 class="text-sm font-semibold text-white">${label}</h3>
+                </div>
+                ${isPrimary ? '<span class="text-xs text-accent bg-accent/10 px-2 py-0.5 rounded">Best Sharpe</span>' : ''}
+              </div>
+              <div class="space-y-1.5 flex-1">
+                <div class="flex justify-between items-baseline">
+                  <span class="text-xs text-muted">Sharpe</span>
+                  <span class="font-semibold text-xl" style="color:${isPrimary ? '#4f8ef7' : '#e5e7eb'}">${sharpeVal}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-xs text-muted">Ann. Return</span>
+                  <span class="text-xs text-white">${annRet}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-xs text-muted">Ann. Volatility</span>
+                  <span class="text-xs text-white">${annVol}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-xs text-muted">Cum. Return</span>
+                  <span class="text-xs text-white">${cumRet}</span>
+                </div>
+                ${mlSection}
+              </div>
+            </div>`;
+        }).join('');
+
+        hide('compare-loading');
+        show('compare-cards');
+
+        // Activate primary model — drives weights, frontier, predictions
+        await setActiveModel(primary_model);
+
       } catch (e) {
-        // non-fatal: cards stay at --
+        setError('compare', e);
+        // Propagate error to dependent sections
+        ['weights', 'frontier', 'pred'].forEach(s => {
+          hide(s + '-loading');
+          const el = document.getElementById(s + '-error');
+          if (!el) return;
+          el.className = 'text-xs text-muted mt-2';
+          el.textContent = 'Unavailable — comparison data could not be loaded.';
+          el.classList.remove('hidden');
+        });
       }
     }
 
     // ====================================================================
-    // 3. Equity Curve — line chart
+    // 3. Portfolio Weights — rendered from compareData (no API call)
+    // ====================================================================
+    function renderWeightsChart(model) {
+      if (!compareData?.comparison[model]) return;
+      const item = compareData.comparison[model];
+      if (!item.weights || item.weights.length === 0) return;
+
+      const sorted   = [...item.weights].sort((a, b) => b.weight - a.weight);
+      const labels   = sorted.map(w => w.ticker.replace('.SA', ''));
+      const values   = sorted.map(w => +(w.weight * 100).toFixed(2));
+      const baseHue  = MODEL_HUES[model] ?? 210;
+
+      if (weightsChartInst) { weightsChartInst.destroy(); weightsChartInst = null; }
+
+      hide('weights-loading');
+      hide('weights-error');
+      show('weights-chart-wrap');
+
+      weightsChartInst = new Chart(document.getElementById('weights-chart'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Weight (%)',
+            data: values,
+            backgroundColor: values.map((_, i) =>
+              `hsl(${baseHue + i * 10}, 62%, ${44 + i * 2}%)`
+            ),
+            borderRadius: 3,
+            borderSkipped: false,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: { label: ctx => ` ${ctx.parsed.y.toFixed(2)}%` }
+            }
+          },
+          scales: {
+            x: { grid: { color: '#2a2d3a' }, ticks: { color: '#9ca3af' } },
+            y: {
+              grid: { color: '#2a2d3a' },
+              ticks: { color: '#9ca3af', callback: v => v + '%' },
+              beginAtZero: true,
+            }
+          }
+        }
+      });
+    }
+
+    // ====================================================================
+    // 4. Efficient Frontier — per model, cached
+    // ====================================================================
+    async function loadFrontierForModel(model) {
+      if (modelCache[model]?.frontier) {
+        drawFrontierChart(modelCache[model].frontier, model);
+        return;
+      }
+      try {
+        const data = await apiFetch(`/portfolio/frontier?n_points=60&model=${model}`);
+        if (!modelCache[model]) modelCache[model] = {};
+        modelCache[model].frontier = data;
+        // Only draw if this model is still active (user may have switched tab)
+        if (activeGlobalModel === model) drawFrontierChart(data, model);
+      } catch (e) {
+        if (activeGlobalModel === model) setError('frontier', e);
+      }
+    }
+
+    function drawFrontierChart(data, model) {
+      const points = data.points.map(p => ({
+        x: +(p.volatility * 100).toFixed(4),
+        y: +(p.expected_return * 100).toFixed(4),
+        sharpe: p.sharpe,
+      }));
+      const best = points.reduce((a, b) => (a.sharpe > b.sharpe ? a : b), points[0]);
+      const modelColor = MODEL_COLORS[model] || '#4f8ef7';
+
+      if (frontierChartInst) { frontierChartInst.destroy(); frontierChartInst = null; }
+      showChart('frontier');
+      show('frontier-legend');
+
+      frontierChartInst = new Chart(document.getElementById('frontier-chart'), {
+        type: 'scatter',
+        data: {
+          datasets: [
+            {
+              label: 'Frontier',
+              data: points,
+              showLine: true,
+              tension: 0.3,
+              borderColor: modelColor,
+              backgroundColor: modelColor + '18',
+              borderWidth: 2,
+              pointRadius: 2,
+              pointHoverRadius: 4,
+              fill: true,
+            },
+            {
+              label: 'Max Sharpe',
+              data: [best],
+              pointRadius: 7,
+              pointBackgroundColor: '#22c55e',
+              pointBorderColor: '#fff',
+              pointBorderWidth: 1.5,
+              showLine: false,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#9ca3af', boxWidth: 12, font: { size: 11 } }
+            },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const p = ctx.raw;
+                  return [
+                    ` Vol: ${p.x.toFixed(3)}%`,
+                    ` Ret: ${p.y.toFixed(3)}%`,
+                    ` Sharpe: ${(p.sharpe || 0).toFixed(3)}`,
+                  ];
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              title: { display: true, text: 'Volatility (%)', color: '#6b7280' },
+              grid: { color: '#2a2d3a' },
+              ticks: { color: '#9ca3af', callback: v => v + '%' },
+            },
+            y: {
+              title: { display: true, text: 'Expected Return (%)', color: '#6b7280' },
+              grid: { color: '#2a2d3a' },
+              ticks: { color: '#9ca3af', callback: v => v + '%' },
+            }
+          }
+        }
+      });
+    }
+
+    // ====================================================================
+    // 5. Predictions — per model, cached
+    // ====================================================================
+    async function loadPredictionsForModel(model) {
+      if (modelCache[model]?.predictions) {
+        drawPredictionsTable(modelCache[model].predictions);
+        return;
+      }
+      try {
+        const data = await apiFetch(`/predictions?model=${model}`);
+        if (!modelCache[model]) modelCache[model] = {};
+        modelCache[model].predictions = data;
+        if (activeGlobalModel === model) drawPredictionsTable(data);
+      } catch (e) {
+        if (activeGlobalModel === model) setError('pred', e);
+      }
+    }
+
+    function drawPredictionsTable(data) {
+      const modelEl = document.getElementById('pred-model');
+      if (modelEl) modelEl.textContent = data.model || '';
+
+      const sorted = [...data.predictions].sort(
+        (a, b) => b.predicted_return - a.predicted_return
+      );
+
+      const tbody = document.getElementById('pred-body');
+      tbody.innerHTML = sorted.map((p, i) => {
+        const pct  = fmtPct(p.predicted_return);
+        const pos  = p.predicted_return >= 0;
+        const rank = i === 0
+          ? ' text-green-400 font-semibold'
+          : (i === sorted.length - 1 ? ' text-red-400' : '');
+        return `
+          <tr class="hover:bg-border/30 transition-colors">
+            <td class="py-2 pr-4 text-white font-medium">${p.ticker.replace('.SA', '')}</td>
+            <td class="py-2 pr-4 text-right${rank} ${pos ? 'text-green-300' : 'text-red-300'}">${pct}</td>
+            <td class="py-2 text-right text-muted">${p.model}</td>
+          </tr>`;
+      }).join('');
+
+      showTable('pred');
+    }
+
+    // ====================================================================
+    // 6. Equity Curve — all models overlaid
     // ====================================================================
     async function loadEquityCurve() {
       try {
-        const data = await apiFetch('/portfolio/equity-curve');
-        document.getElementById('equity-model').textContent = data.model || '';
-        document.getElementById('equity-period').textContent =
-          `Test period: ${data.period_start.slice(0, 7)} to ${data.period_end.slice(0, 7)} (${data.n_points} periods)`;
+        const models = compareData ? compareData.models : ['ridge', 'mlp', 'markowitz'];
 
-        const labels = data.points.map(p => p.date.slice(0, 7));
-        const values = data.points.map(p => p.cumulative_return);
+        const results = await Promise.allSettled(
+          models.map(m => apiFetch(`/portfolio/equity-curve?model=${m}`))
+        );
+
+        let chartLabels = [];
+        let period_start = '';
+        let period_end   = '';
+        let n_points     = 0;
+        const datasets   = [];
+
+        results.forEach((result, i) => {
+          if (result.status !== 'fulfilled') return;
+          const data = result.value;
+          const m    = models[i];
+
+          if (chartLabels.length === 0) {
+            chartLabels  = data.points.map(p => p.date.slice(0, 7));
+            period_start = data.period_start;
+            period_end   = data.period_end;
+            n_points     = data.n_points;
+          }
+
+          const isMarkowitz = m === 'markowitz';
+          datasets.push({
+            label:           MODEL_LABELS[m] || m,
+            data:            data.points.map(p => p.cumulative_return),
+            borderColor:     MODEL_COLORS[m] || '#ffffff',
+            borderWidth:     isMarkowitz ? 1.5 : 2,
+            borderDash:      isMarkowitz ? [5, 3] : [],
+            backgroundColor: 'transparent',
+            pointRadius:     0,
+            pointHoverRadius: 4,
+            fill:            false,
+            tension:         0.2,
+          });
+        });
+
+        if (datasets.length === 0) throw new Error('No equity curve data available');
+
+        document.getElementById('equity-period').textContent = period_start
+          ? `Test period: ${period_start.slice(0, 7)} — ${period_end.slice(0, 7)} (${n_points} periods)`
+          : '';
+
+        // Color legend
+        document.getElementById('equity-models-label').innerHTML = datasets
+          .filter(ds => ds.label !== 'Baseline (1.0)')
+          .map(ds => {
+            const key   = Object.keys(MODEL_LABELS).find(k => MODEL_LABELS[k] === ds.label) || '';
+            const color = MODEL_COLORS[key] || '#9ca3af';
+            const isDash = key === 'markowitz';
+            return `<span class="flex items-center gap-1 text-xs text-muted">
+              <svg width="16" height="8" viewBox="0 0 16 8">
+                <line x1="0" y1="4" x2="16" y2="4"
+                  stroke="${color}" stroke-width="2"
+                  stroke-dasharray="${isDash ? '4 2' : 'none'}"/>
+              </svg>${ds.label}
+            </span>`;
+          }).join('');
+
+        // Baseline
+        datasets.push({
+          label:       'Baseline (1.0)',
+          data:        Array(chartLabels.length).fill(1.0),
+          borderColor: '#6b7280',
+          borderWidth: 1,
+          borderDash:  [4, 4],
+          pointRadius: 0,
+          fill:        false,
+        });
 
         if (equityChartInst) { equityChartInst.destroy(); equityChartInst = null; }
         showChart('equity');
@@ -429,45 +841,24 @@
 
         equityChartInst = new Chart(document.getElementById('equity-chart'), {
           type: 'line',
-          data: {
-            labels,
-            datasets: [
-              {
-                label: 'Cumulative Return',
-                data: values,
-                borderColor: '#4f8ef7',
-                backgroundColor: 'rgba(79,142,247,0.08)',
-                borderWidth: 2,
-                pointRadius: 0,
-                pointHoverRadius: 4,
-                fill: true,
-                tension: 0.2,
-              },
-              {
-                label: 'Baseline (1.0)',
-                data: Array(values.length).fill(1.0),
-                borderColor: '#6b7280',
-                borderWidth: 1,
-                borderDash: [4, 4],
-                pointRadius: 0,
-                fill: false,
-              }
-            ]
-          },
+          data: { labels: chartLabels, datasets },
           options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
               legend: {
-                labels: { color: '#9ca3af', boxWidth: 12, font: { size: 11 } }
+                labels: { color: '#9ca3af', boxWidth: 16, font: { size: 11 } }
               },
               tooltip: {
+                mode: 'index',
+                intersect: false,
                 callbacks: {
                   label: ctx => {
-                    if (ctx.datasetIndex !== 0) return null;
-                    const v = ctx.parsed.y;
-                    const pct = ((v - 1) * 100).toFixed(2);
-                    return [` Cumulative: ${v.toFixed(4)}`, ` vs start: ${pct}%`];
+                    if (ctx.dataset.label === 'Baseline (1.0)') return null;
+                    const v    = ctx.parsed.y;
+                    const pct  = ((v - 1) * 100).toFixed(2);
+                    const sign = pct >= 0 ? '+' : '';
+                    return ` ${ctx.dataset.label}: ${v.toFixed(4)} (${sign}${pct}%)`;
                   }
                 }
               }
@@ -475,11 +866,7 @@
             scales: {
               x: {
                 grid: { color: '#2a2d3a' },
-                ticks: {
-                  color: '#9ca3af',
-                  maxTicksLimit: 10,
-                  maxRotation: 0,
-                }
+                ticks: { color: '#9ca3af', maxTicksLimit: 10, maxRotation: 0 }
               },
               y: {
                 grid: { color: '#2a2d3a' },
@@ -494,177 +881,7 @@
     }
 
     // ====================================================================
-    // 4. Portfolio Weights — bar chart
-    // ====================================================================
-    async function loadWeights() {
-      try {
-        const data = await apiFetch('/portfolio/weights');
-        document.getElementById('weights-model').textContent = data.model || '';
-
-        const sorted = [...data.weights].sort((a, b) => b.weight - a.weight);
-        const labels = sorted.map(w => w.ticker.replace('.SA', ''));
-        const values = sorted.map(w => +(w.weight * 100).toFixed(2));
-
-        if (weightsChartInst) { weightsChartInst.destroy(); weightsChartInst = null; }
-        showChart('weights');
-
-        weightsChartInst = new Chart(document.getElementById('weights-chart'), {
-          type: 'bar',
-          data: {
-            labels,
-            datasets: [{
-              label: 'Weight (%)',
-              data: values,
-              backgroundColor: values.map((_, i) =>
-                `hsl(${210 + i * 12}, 70%, ${45 + i * 2}%)`
-              ),
-              borderRadius: 3,
-              borderSkipped: false,
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                callbacks: { label: ctx => ` ${ctx.parsed.y.toFixed(2)}%` }
-              }
-            },
-            scales: {
-              x: { grid: { color: '#2a2d3a' }, ticks: { color: '#9ca3af' } },
-              y: {
-                grid: { color: '#2a2d3a' },
-                ticks: { color: '#9ca3af', callback: v => v + '%' },
-                beginAtZero: true,
-              }
-            }
-          }
-        });
-      } catch (e) {
-        setError('weights', e);
-      }
-    }
-
-    // ====================================================================
-    // 4. Efficient Frontier — scatter/line chart
-    // ====================================================================
-    async function loadFrontier() {
-      try {
-        const data = await apiFetch('/portfolio/frontier?n_points=60');
-
-        const points = data.points.map(p => ({
-          x: +(p.volatility * 100).toFixed(4),
-          y: +(p.expected_return * 100).toFixed(4),
-          sharpe: p.sharpe,
-        }));
-        const best = points.reduce((a, b) => (a.sharpe > b.sharpe ? a : b), points[0]);
-
-        if (frontierChartInst) { frontierChartInst.destroy(); frontierChartInst = null; }
-        showChart('frontier');
-        show('frontier-legend');
-
-        frontierChartInst = new Chart(document.getElementById('frontier-chart'), {
-          type: 'scatter',
-          data: {
-            datasets: [
-              {
-                label: 'Frontier',
-                data: points,
-                showLine: true,
-                tension: 0.3,
-                borderColor: '#4f8ef7',
-                backgroundColor: 'rgba(79,142,247,0.06)',
-                borderWidth: 2,
-                pointRadius: 2,
-                pointHoverRadius: 4,
-                fill: true,
-              },
-              {
-                label: 'Max Sharpe',
-                data: [best],
-                pointRadius: 6,
-                pointBackgroundColor: '#22c55e',
-                pointBorderColor: '#fff',
-                pointBorderWidth: 1.5,
-                showLine: false,
-              }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                labels: { color: '#9ca3af', boxWidth: 12, font: { size: 11 } }
-              },
-              tooltip: {
-                callbacks: {
-                  label: ctx => {
-                    const p = ctx.raw;
-                    return [
-                      ` Vol: ${p.x.toFixed(3)}%`,
-                      ` Ret: ${p.y.toFixed(3)}%`,
-                      ` Sharpe: ${(p.sharpe || 0).toFixed(3)}`,
-                    ];
-                  }
-                }
-              }
-            },
-            scales: {
-              x: {
-                title: { display: true, text: 'Volatility (%)', color: '#6b7280' },
-                grid: { color: '#2a2d3a' },
-                ticks: { color: '#9ca3af', callback: v => v + '%' },
-              },
-              y: {
-                title: { display: true, text: 'Expected Return (%)', color: '#6b7280' },
-                grid: { color: '#2a2d3a' },
-                ticks: { color: '#9ca3af', callback: v => v + '%' },
-              }
-            }
-          }
-        });
-      } catch (e) {
-        setError('frontier', e);
-      }
-    }
-
-    // ====================================================================
-    // 5. Predictions table
-    // ====================================================================
-    async function loadPredictions() {
-      try {
-        const data = await apiFetch('/predictions');
-        document.getElementById('pred-model').textContent = data.model || '';
-
-        const sorted = [...data.predictions].sort(
-          (a, b) => b.predicted_return - a.predicted_return
-        );
-
-        const tbody = document.getElementById('pred-body');
-        tbody.innerHTML = sorted.map((p, i) => {
-          const pct  = fmtPct(p.predicted_return);
-          const pos  = p.predicted_return >= 0;
-          const rank = i === 0
-            ? ' text-green-400 font-semibold'
-            : (i === sorted.length - 1 ? ' text-red-400' : '');
-          return `
-            <tr class="hover:bg-border/30 transition-colors">
-              <td class="py-2 pr-4 text-white font-medium">${p.ticker.replace('.SA', '')}</td>
-              <td class="py-2 pr-4 text-right${rank} ${pos ? 'text-green-300' : 'text-red-300'}">${pct}</td>
-              <td class="py-2 text-right text-muted">${p.model}</td>
-            </tr>`;
-        }).join('');
-
-        showTable('pred');
-      } catch (e) {
-        setError('pred', e);
-      }
-    }
-
-    // ====================================================================
-    // 6. History table
+    // 7. History table
     // ====================================================================
     async function loadHistory() {
       try {
@@ -685,11 +902,15 @@
           tbody.innerHTML = data.runs.map(r => {
             const sc = STATUS_CLASSES[r.status] || 'text-muted';
             const ts = r.started_at ? r.started_at.replace('T', ' ').slice(0, 16) : '--';
+            const modelColor = MODEL_COLORS[r.model] || '';
+            const modelDot   = modelColor
+              ? `<span class="inline-block w-1.5 h-1.5 rounded-full mr-1 shrink-0" style="background:${modelColor}"></span>`
+              : '';
             return `
               <tr class="hover:bg-border/30 transition-colors">
                 <td class="py-2 pr-3 text-muted font-mono text-xs">${ts}</td>
                 <td class="py-2 pr-3 ${sc}">${r.status}</td>
-                <td class="py-2 pr-3 text-white">${r.model || '--'}</td>
+                <td class="py-2 pr-3 text-white flex items-center">${modelDot}${r.model || '--'}</td>
                 <td class="py-2 pr-3 text-right text-accent">${r.sharpe != null ? fmt(r.sharpe, 3) : '--'}</td>
                 <td class="py-2 text-right">${r.annualized_return != null ? fmtPct(r.annualized_return) : '--'}</td>
               </tr>`;
@@ -706,7 +927,7 @@
     }
 
     // ====================================================================
-    // 7. Scheduler status
+    // 8. Scheduler status
     // ====================================================================
     async function loadScheduler() {
       try {
@@ -782,12 +1003,30 @@
     }
 
     async function refreshAll() {
-      resetSection('equity', 'chart');
-      hide('equity-legend');
+      // Clear state
+      compareData       = null;
+      activeGlobalModel = null;
+      modelCache        = {};
+
+      // Reset compare
+      hide('compare-cards');
+      hide('compare-error');
+      show('compare-loading');
+
+      // Reset strategy detail sections
+      document.getElementById('global-model-tabs').innerHTML = '';
       resetSection('weights', 'chart');
       resetSection('frontier', 'chart');
       hide('frontier-legend');
       resetSection('pred', 'table');
+
+      // Reset equity curve
+      resetSection('equity', 'chart');
+      hide('equity-legend');
+      document.getElementById('equity-models-label').innerHTML = '';
+      document.getElementById('equity-period').textContent = '';
+
+      // Reset other sections
       resetSection('history', 'table');
       resetSection('scheduler', 'card');
 
@@ -796,11 +1035,8 @@
 
       await Promise.all([
         loadHealth(),
-        loadSummary(),
-        loadEquityCurve(),
-        loadWeights(),
-        loadFrontier(),
-        loadPredictions(),
+        loadCompare(),      // also drives weights, frontier, predictions for primary model
+        loadEquityCurve(),  // independent multi-model overlay
         loadHistory(),
         loadScheduler(),
       ]);
@@ -816,11 +1052,8 @@
 
     Promise.all([
       loadHealth(),
-      loadSummary(),
+      loadCompare(),
       loadEquityCurve(),
-      loadWeights(),
-      loadFrontier(),
-      loadPredictions(),
       loadHistory(),
       loadScheduler(),
     ]).then(() => startCountdown());

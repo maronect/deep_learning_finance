@@ -1,0 +1,126 @@
+{
+  "run_id": "20260528T145333",
+  "started_at": "2026-05-28T14:53:33.599524",
+  "status": "completed",
+  "error": null,
+  "selected_assets": [
+    "PETR3.SA",
+    "WEGE3.SA",
+    "TOTS3.SA",
+    "VALE3.SA",
+    "CSNA3.SA",
+    "RADL3.SA",
+    "PCAR3.SA",
+    "VIVT3.SA",
+    "ABEV3.SA",
+    "MRVE3.SA"
+  ],
+  "artifacts_written": [
+    "artifacts/data/20260528T145333_returns.csv",
+    "artifacts/data/20260528T145333_features.csv",
+    "artifacts/data/20260528T145333_targets.csv",
+    "artifacts/models/20260528T145333_ridge.joblib",
+    "artifacts/predictions/20260528T145333_ridge_predictions.csv",
+    "artifacts/weights/20260528T145333_ridge_weights.csv",
+    "artifacts/metrics/20260528T145333_ridge_metrics.csv",
+    "artifacts/metrics/20260528T145333_ridge_model_metrics.csv",
+    "artifacts/metrics/20260528T145333_ridge_equity_curve.csv",
+    "artifacts/models/20260528T145333_mlp.joblib",
+    "artifacts/predictions/20260528T145333_mlp_predictions.csv",
+    "artifacts/weights/20260528T145333_mlp_weights.csv",
+    "artifacts/metrics/20260528T145333_mlp_metrics.csv",
+    "artifacts/metrics/20260528T145333_mlp_model_metrics.csv",
+    "artifacts/metrics/20260528T145333_mlp_equity_curve.csv",
+    "artifacts/predictions/20260528T145333_markowitz_predictions.csv",
+    "artifacts/weights/20260528T145333_markowitz_weights.csv",
+    "artifacts/metrics/20260528T145333_markowitz_metrics.csv",
+    "artifacts/metrics/20260528T145333_markowitz_equity_curve.csv",
+    "artifacts/runs/20260528T145333_manifest.json"
+  ],
+  "pipeline_cfg": {
+    "data": {
+      "tickers": [],
+      "start_date": "2010-01-01",
+      "end_date": "2026-05-28",
+      "frequency": "monthly"
+    },
+    "asset_selection": {
+      "method": "stable_corr_pairs",
+      "n_assets": 10,
+      "min_data_coverage": 0.85
+    },
+    "features": {
+      "lag_window": 24,
+      "min_history": 36
+    },
+    "models": {
+      "enabled": [
+        "ridge",
+        "mlp"
+      ],
+      "blend_alpha": 0.3,
+      "train_ratio": 0.7
+    },
+    "optimization": {
+      "risk_free_rate": 0.15,
+      "frequency": "monthly",
+      "solver": "SLSQP",
+      "weight_bounds": [
+        0.0,
+        0.4
+      ]
+    },
+    "evaluation": {
+      "metrics": [
+        "sharpe_ratio",
+        "annualized_return",
+        "annualized_volatility",
+        "cumulative_return"
+      ]
+    },
+    "artifacts": {
+      "base_dir": "artifacts",
+      "data_dir": "artifacts/data",
+      "models_dir": "artifacts/models",
+      "predictions_dir": "artifacts/predictions",
+      "metrics_dir": "artifacts/metrics",
+      "weights_dir": "artifacts/weights",
+      "runs_dir": "artifacts/runs"
+    }
+  },
+  "models": [
+    "ridge",
+    "mlp",
+    "markowitz"
+  ],
+  "primary_model": "markowitz",
+  "metrics": {
+    "ridge": {
+      "Model": "ridge",
+      "Sharpe": -0.3842553539101835,
+      "Annualized_Return": 0.06805490379648704,
+      "Annualized_Volatility": 0.19403479443835436,
+      "Cumulative_Return": 1.2271027155013001,
+      "Mean_Return": 0.0055016745358700825,
+      "Volatility": 0.0560130204005688
+    },
+    "mlp": {
+      "Model": "mlp",
+      "Sharpe": -0.2338024167988733,
+      "Annualized_Return": 0.10154661698826573,
+      "Annualized_Volatility": 0.18593906664200807,
+      "Cumulative_Return": 1.4146321871548506,
+      "Mean_Return": 0.008092166656667692,
+      "Volatility": 0.053675985089315564
+    },
+    "markowitz": {
+      "Model": "markowitz",
+      "Sharpe": -0.1451890731247073,
+      "Annualized_Return": 0.11226396609436251,
+      "Annualized_Volatility": 0.23216880581761806,
+      "Cumulative_Return": 1.4152728276018571,
+      "Mean_Return": 0.008905885776092536,
+      "Volatility": 0.06702136126811788
+    }
+  }
+}

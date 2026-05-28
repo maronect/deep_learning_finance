@@ -71,6 +71,8 @@ def run_data_ingestion() -> DataLayerResult:
     cfg = get_config("pipeline")
     data_cfg = cfg["data"]
     sel_cfg = cfg.get("asset_selection", {})
+    features_cfg = cfg.get("features", {})
+    models_cfg = cfg.get("models", {})
 
     end_date: str = data_cfg["end_date"]
     if end_date == "today":
@@ -89,6 +91,18 @@ def run_data_ingestion() -> DataLayerResult:
 
     returns = compute_returns(prices, freq=data_cfg["frequency"])
 
+    # Compute the training-window cutoff so asset selection cannot see test data.
+    # The feature period starts after lag_window periods; train_ratio of that
+    # feature period forms the training window. Selection uses only data up to
+    # the end of that window.
+    _start = pd.Timestamp(data_cfg["start_date"])
+    _end = pd.Timestamp(end_date)
+    _total_months = (_end.year - _start.year) * 12 + (_end.month - _start.month)
+    _lag: int = features_cfg.get("lag_window", 24)
+    _ratio: float = models_cfg.get("train_ratio", 0.7)
+    _cutoff_months = _lag + int((_total_months - _lag) * _ratio)
+    selection_end_date: str = (_start + pd.DateOffset(months=_cutoff_months)).strftime("%Y-%m-%d")
+
     selected = select_assets(
         start_date=data_cfg["start_date"],
         end_date=end_date,
@@ -97,6 +111,7 @@ def run_data_ingestion() -> DataLayerResult:
         return_freq=data_cfg["frequency"],
         min_data_coverage=sel_cfg.get("min_data_coverage", 0.85),
         prices=prices,  # pass pre-downloaded prices — avoids a second network call
+        selection_end_date=selection_end_date,
     )
 
     return DataLayerResult(

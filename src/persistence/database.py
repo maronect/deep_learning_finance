@@ -139,14 +139,22 @@ def _manifest_to_row(manifest: dict[str, Any]) -> dict[str, Any]:
     opt_cfg = pipeline_cfg.get("optimization", {}) or {}
     data_cfg = pipeline_cfg.get("data", {}) or {}
 
-    metrics = manifest.get("metrics", {}) or {}
+    metrics_raw = manifest.get("metrics", {}) or {}
+    primary_model = manifest.get("primary_model") or models_cfg.get("default", "")
+    # Support both multi-model format (metrics is dict[str, dict]) and legacy format.
+    if primary_model and isinstance(metrics_raw.get(primary_model), dict):
+        metrics = metrics_raw[primary_model]
+    elif any(isinstance(v, dict) for v in metrics_raw.values()):
+        metrics = {}
+    else:
+        metrics = metrics_raw
     selected = manifest.get("selected_assets") or []
 
     return {
         "run_id": manifest.get("run_id", ""),
         "started_at": str(manifest.get("started_at", "")),
         "status": manifest.get("status", ""),
-        "model": models_cfg.get("default", ""),
+        "model": primary_model,
         "blend_alpha": models_cfg.get("blend_alpha"),
         "train_ratio": models_cfg.get("train_ratio"),
         "lag_window": features_cfg.get("lag_window"),

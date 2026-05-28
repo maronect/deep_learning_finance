@@ -17,6 +17,22 @@ import pandas as pd
 from src.utils.config_loader import get_config
 
 
+def _primary_metrics(metrics: dict, primary_model: str) -> dict:
+    """Extract the flat metrics dict for the primary model.
+
+    Handles both the new multi-model format (metrics is dict[str, dict]) and
+    the legacy single-model format (metrics is a flat dict with "Sharpe" etc.).
+    """
+    if not metrics:
+        return {}
+    if primary_model and isinstance(metrics.get(primary_model), dict):
+        return metrics[primary_model]
+    # Legacy format: flat dict keyed by metric names.
+    if any(isinstance(v, dict) for v in metrics.values()):
+        return {}
+    return metrics
+
+
 def _runs_dir() -> Path:
     """Return the runs artifact directory from config."""
     cfg = get_config("pipeline")
@@ -49,15 +65,17 @@ def list_runs() -> pd.DataFrame:
             continue
 
         metrics = m.get("metrics", {}) or {}
+        primary = m.get("primary_model") or m.get("pipeline_cfg", {}).get("models", {}).get("default", "")
+        primary_metrics = _primary_metrics(metrics, primary)
         rows.append(
             {
                 "run_id": m.get("run_id", ""),
                 "started_at": m.get("started_at", ""),
                 "status": m.get("status", ""),
-                "model": m.get("pipeline_cfg", {}).get("models", {}).get("default", ""),
+                "model": primary,
                 "selected_assets_count": len(m.get("selected_assets") or []),
-                "sharpe": metrics.get("Sharpe"),
-                "annualized_return": metrics.get("Annualized_Return"),
+                "sharpe": primary_metrics.get("Sharpe"),
+                "annualized_return": primary_metrics.get("Annualized_Return"),
                 "artifacts_written_count": len(m.get("artifacts_written") or []),
             }
         )
@@ -118,23 +136,25 @@ def compare_runs(run_ids: Optional[list[str]] = None) -> pd.DataFrame:
 
         cfg = m.get("pipeline_cfg", {})
         metrics = m.get("metrics", {}) or {}
+        primary = m.get("primary_model") or cfg.get("models", {}).get("default", "")
+        pm = _primary_metrics(metrics, primary)
 
         rows.append(
             {
                 "run_id": run_id,
                 "started_at": m.get("started_at", ""),
                 "status": m.get("status", ""),
-                "model": cfg.get("models", {}).get("default", ""),
+                "model": primary,
                 "blend_alpha": cfg.get("models", {}).get("blend_alpha"),
                 "lag_window": cfg.get("features", {}).get("lag_window"),
                 "train_ratio": cfg.get("models", {}).get("train_ratio"),
                 "risk_free_rate": cfg.get("optimization", {}).get("risk_free_rate"),
                 "frequency": cfg.get("data", {}).get("frequency"),
                 "n_assets": len(m.get("selected_assets") or []),
-                "sharpe": metrics.get("Sharpe"),
-                "annualized_return": metrics.get("Annualized_Return"),
-                "annualized_volatility": metrics.get("Annualized_Volatility"),
-                "cumulative_return": metrics.get("Cumulative_Return"),
+                "sharpe": pm.get("Sharpe"),
+                "annualized_return": pm.get("Annualized_Return"),
+                "annualized_volatility": pm.get("Annualized_Volatility"),
+                "cumulative_return": pm.get("Cumulative_Return"),
             }
         )
 

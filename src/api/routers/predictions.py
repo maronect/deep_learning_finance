@@ -27,28 +27,37 @@ def get_predictions(
         default=None,
         description="Run ID to retrieve predictions from. Defaults to the latest completed run.",
     ),
+    model: Optional[str] = Query(
+        default=None,
+        description="Model name (e.g. 'ridge', 'mlp', 'markowitz'). "
+                    "Defaults to the model with the highest Sharpe in the run.",
+    ),
 ) -> PredictionsResponse:
     """Return the blended expected-return predictions (mu) for each selected asset.
 
-    Reads from the predictions CSV artifact written by `stage_export_artifacts`.
-    Each value is the blended prediction: `alpha * ml_pred + (1 - alpha) * hist_mean`.
+    Reads from the predictions CSV artifact written by stage_export_artifacts.
+    For ML models, each value is the blended prediction:
+        alpha * ml_pred + (1 - alpha) * hist_mean.
+    For the 'markowitz' baseline, values are the raw historical means.
 
     Args:
         run_id: Optional run identifier. If omitted, the most recent completed run is used.
+        model: Optional model name. If omitted, returns the best-Sharpe model for the run.
 
     Raises:
-        404: If no completed runs exist or the requested run_id has no predictions artifact.
+        404: If no completed runs exist or the requested run has no predictions artifact.
     """
     try:
-        resolved_id, model = resolve_run(run_id)
+        resolved_id, resolved_model = resolve_run(run_id, model)
     except (LookupError, FileNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    path = predictions_path(resolved_id, model)
+    path = predictions_path(resolved_id, resolved_model)
     if not path.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"Predictions artifact not found for run_id='{resolved_id}'. "
+            detail=f"Predictions artifact not found for run_id='{resolved_id}', "
+                   f"model='{resolved_model}'. "
                    "Ensure the pipeline ran successfully through stage_export_artifacts.",
         )
 
@@ -62,4 +71,4 @@ def get_predictions(
         for _, row in df.iterrows()
     ]
 
-    return PredictionsResponse(run_id=resolved_id, model=model, predictions=items)
+    return PredictionsResponse(run_id=resolved_id, model=resolved_model, predictions=items)

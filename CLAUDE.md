@@ -6,6 +6,10 @@
 - You may respond to me in Portuguese
 - Do not use any emoji
 
+## Outputs
+- Explain the reasoning behind the technical choices made in the code, directly and concisely.
+- Present alternatives considered and justify why the chosen approach was preferred.
+- When changes span multiple files, start with a high-level overview before describing each file's modifications individually.
 ---
 
 ## Project Overview
@@ -131,6 +135,8 @@ Image size reduction: `torch` alone is ~2 GB; the API image installs only what t
 - `src/data/asset_selection.py` — original selection, still used by notebooks
 - `src/models/lr.py` — original Ridge + MLP implementation
 - `src/models/rnn.py` — original LSTM/RNN (PyTorch)
+- `src/utils/portfolio_utils.py` — wrappers around optimization functions, used only by notebooks/visualization
+- `src/utils/visualization.py` — notebook visualization utilities, not used by the main pipeline
 - `notebooks/` — all notebooks
 
 ### Stage 9 — COMPLETE
@@ -143,6 +149,23 @@ Image size reduction: `torch` alone is ~2 GB; the API image installs only what t
 - `README.md` — complete rewrite in English: results table, ML methodology, architecture overview, API endpoint reference, local execution, deployment, CI/CD, technology stack, MLOps practices
 - `ARCHITECTURE.md` — updated: all modules marked implemented, full data flow diagram, updated directory tree, deployment details added
 
+### Post-Stage 10 — Multi-model pipeline (uncommitted, current branch: dev)
+- `config/pipeline.yaml` — `models.default` replaced by `models.enabled: ["ridge", "mlp"]`; every run now trains and compares all listed models
+- `src/models/metrics.py` — new module: finance-specific ML diagnostics (`compute_model_metrics`): IC, ICIR, Spearman IC, hit rate, MAE, MSE, R²
+- `src/pipeline/context.py` — all result fields (blended_mu, weights, metrics, portfolio_returns) are now `dict[str, ...]` keyed by strategy name; new field `model_metrics`
+- `src/pipeline/stages.py` — `stage_train_models` trains all enabled models + computes walk-forward OOS diagnostics per model; `stage_optimize_portfolio` adds `"markowitz"` as an automatic classical baseline (uses historical means, no ML); `stage_evaluate` and `stage_export_artifacts` produce separate artifacts per strategy
+- `src/utils/export.py` — new functions: `save_model_metrics`, `save_equity_curve`
+- `src/pipeline/registry.py` — `_primary_metrics()` helper handles both multi-model and legacy manifest formats
+- `src/api/deps.py` — added `_pick_model()`, `model_metrics_path()`; `resolve_run()` and `latest_completed_run()` now accept optional `model` param
+- `src/api/schemas/responses.py` — new schemas: `ModelComparisonItem`, `PortfolioCompareResponse`, `EquityCurvePoint`, `EquityCurveResponse`; `ModelMetricsResponse` now has real metric fields (ic, icir, hit_rate, etc.) replacing the old `note` field
+- `src/api/routers/portfolio.py` — all endpoints accept `?model=`; new endpoints: `GET /portfolio/equity-curve`, `GET /portfolio/compare`
+- `src/api/routers/metrics.py` — `GET /metrics/portfolio` accepts `?model=`; `GET /metrics/model` now returns real walk-forward diagnostic metrics
+- `src/persistence/database.py` — `_manifest_to_row()` updated to handle multi-model manifest format
+- Artifact pattern extended: `{run_id}_{model}_model_metrics.csv` (ML diagnostics), `{run_id}_{model}_equity_curve.csv`
+- Manifest now includes `models` (list of all strategies) and `primary_model` (highest Sharpe)
+- `LEARNING_TRAIL.md`, `UNDERSTANDING.md` — project documentation files (untracked); do not delete
+- `tests/unit/test_model_metrics.py` — unit tests for `compute_model_metrics`
+
 ---
 
 ## Key Conventions
@@ -151,6 +174,7 @@ Image size reduction: `torch` alone is ~2 GB; the API image installs only what t
 - **No hardcoded parameters** anywhere in `src/`. All values (dates, tickers, frequencies, hyperparameters) come from `config/*.yaml`.
 - Always load config via `src.utils.config_loader.get_config("pipeline")` — never open YAML files directly.
 - `config/pipeline.yaml` is the single source of truth for pipeline parameters.
+- Models to train are listed under `models.enabled` (list), not `models.default` (legacy, single model).
 
 ### Code style
 - **Type hints** on all function signatures.

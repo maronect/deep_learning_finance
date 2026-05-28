@@ -131,9 +131,9 @@ class PortfolioMetricsResponse(BaseModel):
 class ModelMetricsResponse(BaseModel):
     """Response for GET /metrics/model.
 
-    Reports the model name and blend configuration from the run manifest.
-    ML training metrics (MAE, R²) are not persisted by the current pipeline;
-    this endpoint will be extended in a future stage.
+    Reports model configuration and walk-forward OOS diagnostic metrics.
+    Finance-specific metrics (IC, ICIR, hit rate, Spearman IC) are None for
+    runs completed before this feature was introduced.
     """
 
     run_id: str
@@ -141,7 +141,13 @@ class ModelMetricsResponse(BaseModel):
     blend_alpha: Optional[float]
     train_ratio: Optional[float]
     lag_window: Optional[int]
-    note: str
+    ic: Optional[float]
+    icir: Optional[float]
+    hit_rate: Optional[float]
+    spearman_ic: Optional[float]
+    mae: Optional[float]
+    mse: Optional[float]
+    r2: Optional[float]
 
 
 class RunRecord(BaseModel):
@@ -189,6 +195,30 @@ class SyncResponse(BaseModel):
 
     synced: int
     message: str
+
+
+class ModelComparisonItem(BaseModel):
+    """Per-model comparison entry for GET /portfolio/compare."""
+
+    model: str
+    weights: list[WeightItem]
+    sharpe: Optional[float]
+    annualized_return: Optional[float]
+    annualized_volatility: Optional[float]
+    cumulative_return: Optional[float]
+    ic: Optional[float]
+    icir: Optional[float]
+    hit_rate: Optional[float]
+    spearman_ic: Optional[float]
+
+
+class PortfolioCompareResponse(BaseModel):
+    """Response for GET /portfolio/compare."""
+
+    run_id: str
+    models: list[str]
+    primary_model: str
+    comparison: dict[str, ModelComparisonItem]
 
 
 class EquityCurvePoint(BaseModel):

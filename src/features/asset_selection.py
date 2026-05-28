@@ -232,6 +232,7 @@ def select_assets(
     return_freq: str = "monthly",
     min_data_coverage: float = 0.85,
     prices: Optional[pd.DataFrame] = None,
+    selection_end_date: Optional[str] = None,
 ) -> list[str]:
     """Select a decorrelated subset of assets from the Brazilian stock universe.
 
@@ -255,6 +256,11 @@ def select_assets(
             ticker to be included. Defaults to 0.85.
         prices: Optional pre-downloaded price DataFrame. If provided, the download
             step is skipped (avoids duplicate network calls).
+        selection_end_date: Optional upper cutoff for the data used to compute
+            correlations. When provided, only prices on or before this date are
+            used for the selection — preventing the test period from leaking into
+            the asset selection step (look-ahead bias). Defaults to None (uses
+            full dataset, same as prior behaviour).
 
     Returns:
         List of selected ticker symbols.
@@ -277,7 +283,15 @@ def select_assets(
             min_data_coverage=min_data_coverage,
         )
 
-    returns = compute_returns(prices, freq=return_freq)
+    # Restrict the price history used for correlation analysis to the training
+    # window so that the selection cannot see future (test-period) data.
+    prices_sel = (
+        prices[prices.index <= pd.Timestamp(selection_end_date)]
+        if selection_end_date is not None
+        else prices
+    )
+
+    returns = compute_returns(prices_sel, freq=return_freq)
 
     if method == "sum_abs_correlation":
         return _select_by_sum_abs_correlation(returns, n_assets)
@@ -290,9 +304,9 @@ def select_assets(
 
     if method == "stable_corr_pairs":
         return _select_stable_pairs(
-            prices,
+            prices_sel,
             start_year=int(start_date[:4]),
-            end_year=int(end_date[:4]),
+            end_year=int(prices_sel.index[-1].year),
             n_pairs=n_assets // 2,
             return_freq=return_freq,
         )

@@ -17,15 +17,15 @@ features:
   min_history: 36       # Minimum number of periods required per asset
 
 models:
-  default: "ridge"      # Options: ridge, mlp, rnn
-  blend_alpha: 0.3      # Weight of ML prediction in blending: final_mu = alpha * ml + (1-alpha) * hist
-  train_ratio: 0.7      # Fraction of data used for training in walk-forward splits
+  enabled: ["ridge", "mlp"]   # Models to train and compare in every run
+  blend_alpha: 0.3            # Weight of ML prediction: final_mu = alpha * ml + (1-alpha) * hist
+  train_ratio: 0.7            # Fraction of data used for training in walk-forward splits
 
 optimization:
   risk_free_rate: 0.15  # Annual risk-free rate (SELIC 2025)
   frequency: "monthly"  # Frequency for risk-free rate adjustment
   solver: "SLSQP"
-  weight_bounds: [0.0, 1.0]  # No short selling
+  weight_bounds: [0.0, 0.40]  # No short selling; max 40% per asset
 
 evaluation:
   metrics:

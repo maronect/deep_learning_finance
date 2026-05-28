@@ -139,7 +139,10 @@ class TestRunScheduledPipeline:
         """run_scheduled_pipeline should call run_pipeline once."""
         mock_ctx = MagicMock()
         mock_ctx.status = "completed"
-        mock_ctx.metrics = {}
+        mock_ctx.metrics = {
+            "ridge": {"Sharpe": 0.45, "Annualized_Return": 0.12},
+            "markowitz": {"Sharpe": 0.38, "Annualized_Return": 0.09},
+        }
         mock_ctx.error = None
 
         sched_cfg = {
@@ -158,7 +161,10 @@ class TestRunScheduledPipeline:
         """A .log file should appear in artifacts/logs/ after execution."""
         mock_ctx = MagicMock()
         mock_ctx.status = "completed"
-        mock_ctx.metrics = {}
+        mock_ctx.metrics = {
+            "ridge": {"Sharpe": 0.45, "Annualized_Return": 0.12},
+            "markowitz": {"Sharpe": 0.38, "Annualized_Return": 0.09},
+        }
         mock_ctx.error = None
 
         sched_cfg = {
@@ -178,7 +184,10 @@ class TestRunScheduledPipeline:
         """Log file content should mention the run_id."""
         mock_ctx = MagicMock()
         mock_ctx.status = "completed"
-        mock_ctx.metrics = {}
+        mock_ctx.metrics = {
+            "ridge": {"Sharpe": 0.45, "Annualized_Return": 0.12},
+            "markowitz": {"Sharpe": 0.38, "Annualized_Return": 0.09},
+        }
         mock_ctx.error = None
 
         sched_cfg = {
@@ -199,7 +208,10 @@ class TestRunScheduledPipeline:
         """If pipeline returns status=failed, a RuntimeError should be raised."""
         mock_ctx = MagicMock()
         mock_ctx.status = "failed"
-        mock_ctx.metrics = {}
+        mock_ctx.metrics = {
+            "ridge": {"Sharpe": 0.45, "Annualized_Return": 0.12},
+            "markowitz": {"Sharpe": 0.38, "Annualized_Return": 0.09},
+        }
         mock_ctx.error = "Something went wrong"
 
         sched_cfg = {

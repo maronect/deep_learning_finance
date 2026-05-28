@@ -4,6 +4,10 @@ Defines each pipeline stage as an independent, composable function.
 Stages in order: ingest → compute_returns → build_features →
 train_models → predict_returns → optimize_portfolio → evaluate → export_artifacts.
 Each stage reads from and writes to the PipelineContext.
+
+Every run trains all models listed in pipeline_cfg:models:enabled and also
+adds "markowitz" (classical, no ML) as an automatic baseline. All multi-model
+fields in PipelineContext are dicts keyed by model name.
 """
 from __future__ import annotations
 
@@ -88,52 +92,90 @@ def stage_build_features(context: PipelineContext) -> None:
 
 
 def stage_train_models(context: PipelineContext) -> None:
-    """Instantiate and train the configured ML model on all available data.
+    """Train all enabled ML models and compute walk-forward OOS diagnostics.
 
-    The model type is read from pipeline_cfg:models:default. Training on the
-    full dataset produces the best possible forward-looking predictions.
-    Walk-forward diagnostic metrics are handled in stage_evaluate if needed.
+    Reads pipeline_cfg:models:enabled to determine which models to train. Each
+    model is trained on the full dataset for the best possible forward-looking
+    predictions. A walk-forward loop then trains fresh models per split and
+    evaluates them out-of-sample to produce diagnostic metrics (IC, ICIR, etc.)
+    without data leakage.
 
-    The trained model is stored as a transient attribute (_trained_model) on
-    the context to avoid forcing serialization of sklearn objects.
+    The classical Markowitz baseline ("markowitz") requires no training and is
+    added automatically during stage_optimize_portfolio.
 
     Args:
         context: Shared pipeline state.
-            Reads: feature_matrix, target_matrix, pipeline_cfg.
-            Writes: context._trained_model (transient attribute).
+            Reads: feature_matrix, target_matrix, walk_forward_splits, pipeline_cfg.
+            Writes: context._trained_models (transient), context.model_metrics.
 
     Raises:
-        ValueError: If stage_build_features has not been run or the model name is unknown.
+        ValueError: If required prior stages have not run or an unknown model name
+            appears in models.enabled.
     """
+    from src.models.metrics import compute_model_metrics
     from src.models.mlp import MLPReturnModel
     from src.models.ridge import RidgeReturnModel
 
     if context.feature_matrix is None or context.target_matrix is None:
         raise ValueError("stage_build_features must run before stage_train_models.")
+    if context.walk_forward_splits is None:
+        raise ValueError("stage_build_features must run before stage_train_models.")
 
-    model_name: str = context.pipeline_cfg["models"].get("default", "ridge")
-    model_map = {"ridge": RidgeReturnModel, "mlp": MLPReturnModel}
+    enabled: list[str] = context.pipeline_cfg["models"].get("enabled", ["ridge"])
+    model_map: dict[str, type] = {"ridge": RidgeReturnModel, "mlp": MLPReturnModel}
 
-    if model_name not in model_map:
+    unknown = [m for m in enabled if m not in model_map]
+    if unknown:
         raise ValueError(
-            f"Unknown model '{model_name}'. Available: {list(model_map.keys())}."
+            f"Unknown model(s) in models.enabled: {unknown}. "
+            f"Available: {list(model_map.keys())}."
         )
 
-    model = model_map[model_name]()
-    model.fit(context.feature_matrix, context.target_matrix)
-    context._trained_model = model  # type: ignore[attr-defined]
+    X = context.feature_matrix
+    y = context.target_matrix
+
+    trained_models: dict = {}
+    model_metrics: dict[str, dict] = {}
+    wf_raw_preds: dict[str, np.ndarray] = {}
+
+    for model_name in enabled:
+        model = model_map[model_name]()
+        model.fit(X, y)
+        trained_models[model_name] = model
+
+        y_pred_list: list[np.ndarray] = []
+        y_true_list: list[np.ndarray] = []
+        for split in context.walk_forward_splits:
+            train_end: int = split["train_end"]
+            test_idx: int = split["test_idx"]
+            diag_model = model_map[model_name]()
+            diag_model.fit(X.iloc[:train_end], y.iloc[:train_end])
+            pred_df = diag_model.predict(X.iloc[[test_idx]])
+            y_pred_list.append(pred_df.values[0])
+            y_true_list.append(y.iloc[test_idx].values)
+
+        y_pred_arr = np.array(y_pred_list)
+        y_true_arr = np.array(y_true_list)
+        model_metrics[model_name] = compute_model_metrics(y_pred_arr, y_true_arr)
+        wf_raw_preds[model_name] = y_pred_arr  # shape (n_splits, n_assets)
+
+    context._trained_models = trained_models  # type: ignore[attr-defined]
+    context._wf_raw_predictions = wf_raw_preds  # type: ignore[attr-defined]
+    context.model_metrics = model_metrics
 
 
 def stage_predict_returns(context: PipelineContext) -> None:
-    """Generate ML predictions and compute historical means, then blend them.
+    """Generate blended predictions for each enabled ML model.
 
-    Calls predict_expected_returns() on the trained model using the last available
-    feature row. Historical means are computed from the training portion of
-    returns_selected (aligned to the last walk-forward split's training window).
+    For each model in _trained_models, calls predict_expected_returns() on the
+    last available feature row, then blends the ML prediction with the historical
+    mean. Historical means are computed once from the training window of the last
+    walk-forward split and shared across all models.
 
     Args:
         context: Shared pipeline state.
-            Reads: _trained_model, feature_matrix, walk_forward_splits, returns_selected.
+            Reads: _trained_models, feature_matrix, walk_forward_splits,
+                   returns_selected, pipeline_cfg.
             Writes: ml_predictions, historical_means, blended_mu.
 
     Raises:
@@ -141,41 +183,48 @@ def stage_predict_returns(context: PipelineContext) -> None:
     """
     from src.models.blending import blend_from_config
 
-    model = getattr(context, "_trained_model", None)
-    if model is None:
+    trained_models = getattr(context, "_trained_models", None)
+    if trained_models is None:
         raise ValueError("stage_train_models must run before stage_predict_returns.")
     if context.walk_forward_splits is None or context.returns_selected is None:
         raise ValueError("stage_build_features must run before stage_predict_returns.")
 
-    ml_preds = model.predict_expected_returns(context.feature_matrix)
-
-    # Historical means from the training portion of the last walk-forward split.
-    # walk_forward_splits indices are positional into feature_matrix.
-    # feature_matrix starts at returns_selected.index[lag_window], so add the offset.
     last_split = context.walk_forward_splits[-1]
     train_end_feat_idx = last_split["train_end"]
-
     feature_start_loc: int = context.returns_selected.index.get_loc(  # type: ignore[assignment]
         context.feature_matrix.index[0]
     )
     hist_end_loc = feature_start_loc + train_end_feat_idx
     hist_means = context.returns_selected.iloc[:hist_end_loc].mean()
-
-    context.ml_predictions = ml_preds
     context.historical_means = hist_means
-    context.blended_mu = blend_from_config(ml_preds, hist_means)
+
+    ml_predictions: dict[str, pd.Series] = {}
+    blended_mu: dict[str, pd.Series] = {}
+
+    for model_name, model in trained_models.items():
+        ml_pred = model.predict_expected_returns(context.feature_matrix)
+        blended = blend_from_config(ml_pred, hist_means)
+        ml_predictions[model_name] = ml_pred
+        blended_mu[model_name] = blended
+
+    context.ml_predictions = ml_predictions
+    context.blended_mu = blended_mu
 
 
 def stage_optimize_portfolio(context: PipelineContext) -> None:
-    """Optimize portfolio weights to maximize Sharpe Ratio using blended expected returns.
+    """Optimize portfolio weights for each ML model and for Markowitz classical baseline.
 
-    Computes the covariance matrix from the training window only (no future data).
-    Falls back to equal weights if the optimizer fails to converge.
+    Runs maximize_sharpe for:
+    - Each ML model in blended_mu, using its blended expected returns.
+    - "markowitz": the classical Markowitz baseline, using historical_means as mu
+      with no ML component.
+
+    Falls back to equal weights if the optimizer fails to converge for any model.
 
     Args:
         context: Shared pipeline state.
-            Reads: blended_mu, returns_selected, walk_forward_splits,
-                   feature_matrix, pipeline_cfg.
+            Reads: blended_mu, historical_means, returns_selected,
+                   walk_forward_splits, feature_matrix, pipeline_cfg.
             Writes: cov_matrix, weights, weights_series.
 
     Raises:
@@ -188,63 +237,78 @@ def stage_optimize_portfolio(context: PipelineContext) -> None:
         raise ValueError("stage_predict_returns must run before stage_optimize_portfolio.")
     if context.walk_forward_splits is None or context.feature_matrix is None:
         raise ValueError("stage_build_features must run before stage_optimize_portfolio.")
+    if context.historical_means is None:
+        raise ValueError("stage_predict_returns must run before stage_optimize_portfolio.")
 
     opt_cfg = context.pipeline_cfg["optimization"]
     rf_annual: float = opt_cfg["risk_free_rate"]
     freq: str = opt_cfg["frequency"]
     rf_period: float = ajustar_risk_free(rf_annual, freq=freq)
+    weight_bounds: list = opt_cfg.get("weight_bounds", [0.0, 1.0])
+    max_weight: float = float(weight_bounds[1])
 
-    # Slice training returns: returns_selected up to the last training split boundary.
-    # walk_forward_splits indices are positional into feature_matrix, not returns_selected.
     last_split = context.walk_forward_splits[-1]
     train_end_feat_idx: int = last_split["train_end"]
-
     feature_start_loc: int = context.returns_selected.index.get_loc(  # type: ignore[assignment]
         context.feature_matrix.index[0]
     )
     hist_end_loc = feature_start_loc + train_end_feat_idx
     returns_train = context.returns_selected.iloc[:hist_end_loc]
-
     cov = returns_train.cov()
 
     n = len(context.selected_assets)
-    weights = maximize_sharpe(
-        context.blended_mu.values,
-        cov.values,
-        risk_free_rate=rf_period,
-    )
 
-    if weights is None:
-        warnings.warn(
-            "Sharpe optimization failed to converge. Using equal weights as fallback.",
-            RuntimeWarning,
-            stacklevel=2,
+    # Build the full set of mu vectors: all ML models + classical baseline.
+    mu_per_model: dict[str, pd.Series] = dict(context.blended_mu)
+    mu_per_model["markowitz"] = context.historical_means
+
+    weights: dict[str, np.ndarray] = {}
+    weights_series: dict[str, pd.Series] = {}
+
+    for model_name, mu in mu_per_model.items():
+        w = maximize_sharpe(mu.values, cov.values, risk_free_rate=rf_period, max_weight=max_weight)
+        if w is None:
+            warnings.warn(
+                f"Sharpe optimization failed for '{model_name}'. Using equal weights.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            w = np.full(n, 1.0 / n)
+        weights[model_name] = w
+        weights_series[model_name] = pd.Series(
+            w, index=context.selected_assets, name="weights"
         )
-        weights = np.full(n, 1.0 / n)
 
     context.cov_matrix = cov
     context.weights = weights
-    context.weights_series = pd.Series(
-        weights, index=context.selected_assets, name="weights"
-    )
+    context.weights_series = weights_series
 
 
 def stage_evaluate(context: PipelineContext) -> None:
-    """Compute portfolio performance metrics on the out-of-sample test period.
+    """Compute portfolio performance metrics using walk-forward per-split optimization.
 
-    The out-of-sample period consists of all test indices across all walk-forward
-    splits. Portfolio returns are computed as returns_selected.dot(weights).
+    For each walk-forward split, portfolio weights are computed using only the
+    training data available at that point in time — eliminating the look-ahead
+    bias that arises from applying a single final weight vector across all test
+    periods. Per-split ML predictions stored by stage_train_models are blended
+    with per-split historical means to form the mu vector for each model.
+
+    The markowitz baseline uses the per-split historical mean as mu (no ML).
 
     Args:
         context: Shared pipeline state.
-            Reads: weights, returns_selected, walk_forward_splits,
-                   feature_matrix, pipeline_cfg.
+            Reads: weights, returns_selected, walk_forward_splits, feature_matrix,
+                   pipeline_cfg, _wf_raw_predictions (set by stage_train_models).
             Writes: portfolio_returns, metrics.
 
     Raises:
-        ValueError: If required prior stages have not been run.
+        ValueError: If required prior stages have not been run, or if walk-forward
+            predictions are missing for an ML model.
     """
+    from src.features.returns import ajustar_risk_free
+    from src.models.blending import blend_predictions
     from src.optimization.evaluation import evaluate_portfolio
+    from src.optimization.sharpe import maximize_sharpe
 
     if context.weights is None:
         raise ValueError("stage_optimize_portfolio must run before stage_evaluate.")
@@ -254,6 +318,10 @@ def stage_evaluate(context: PipelineContext) -> None:
     opt_cfg = context.pipeline_cfg["optimization"]
     rf_annual: float = opt_cfg["risk_free_rate"]
     freq: str = opt_cfg["frequency"]
+    rf_period: float = ajustar_risk_free(rf_annual, freq=freq)
+    weight_bounds: list = opt_cfg.get("weight_bounds", [0.0, 1.0])
+    max_weight: float = float(weight_bounds[1])
+    blend_alpha: float = context.pipeline_cfg["models"].get("blend_alpha", 0.3)
 
     _periods_map: dict[str, int] = {
         "daily": 252,
@@ -262,47 +330,94 @@ def stage_evaluate(context: PipelineContext) -> None:
         "annually": 1,
     }
     periods_per_year: int = _periods_map.get(freq, 12)
+    n: int = len(context.selected_assets)
 
-    # Collect all out-of-sample test periods.
     feature_start_loc: int = context.returns_selected.index.get_loc(  # type: ignore[assignment]
         context.feature_matrix.index[0]
     )
-    test_abs_locs = [
-        feature_start_loc + s["test_idx"] for s in context.walk_forward_splits
-    ]
-    returns_test = context.returns_selected.iloc[test_abs_locs]
-    portfolio_returns = returns_test.dot(context.weights)
 
-    model_name: str = context.pipeline_cfg["models"].get("default", "ridge")
-    metrics_series = evaluate_portfolio(
-        portfolio_returns,
-        risk_free_rate_annual=rf_annual,
-        periods_per_year=periods_per_year,
-        model_name=model_name,
-    )
+    wf_raw_preds: dict[str, np.ndarray] = getattr(context, "_wf_raw_predictions", {})
+    all_model_names: list[str] = list(context.weights.keys())
 
-    context.portfolio_returns = portfolio_returns
-    context.metrics = metrics_series.to_dict()
+    # Validate that per-split predictions exist for every ML model.
+    for model_name in all_model_names:
+        if model_name != "markowitz" and model_name not in wf_raw_preds:
+            raise ValueError(
+                f"Walk-forward predictions not found for model '{model_name}'. "
+                "stage_train_models must run before stage_evaluate."
+            )
+
+    per_model_returns: dict[str, list[float]] = {m: [] for m in all_model_names}
+    test_dates: list = []
+
+    for split_i, split in enumerate(context.walk_forward_splits):
+        train_end: int = split["train_end"]
+        test_idx: int = split["test_idx"]
+
+        # Use only training data available at this split — no future information.
+        hist_end: int = feature_start_loc + train_end
+        returns_train_split = context.returns_selected.iloc[:hist_end]
+        cov_split = returns_train_split.cov()
+        hist_means_split = returns_train_split.mean()
+
+        test_dates.append(context.returns_selected.index[feature_start_loc + test_idx])
+
+        for model_name in all_model_names:
+            if model_name == "markowitz":
+                mu_split = hist_means_split
+            else:
+                raw_pred = pd.Series(
+                    wf_raw_preds[model_name][split_i],
+                    index=context.selected_assets,
+                )
+                mu_split = blend_predictions(raw_pred, hist_means_split, alpha=blend_alpha)
+
+            w_split = maximize_sharpe(
+                mu_split.values,
+                cov_split.values,
+                risk_free_rate=rf_period,
+                max_weight=max_weight,
+            )
+            if w_split is None:
+                w_split = np.full(n, 1.0 / n)
+
+            test_return = float(
+                context.returns_selected.iloc[feature_start_loc + test_idx].dot(w_split)
+            )
+            per_model_returns[model_name].append(test_return)
+
+    test_date_idx = pd.DatetimeIndex(test_dates)
+    metrics: dict[str, dict] = {}
+    portfolio_returns_all: dict[str, pd.Series] = {}
+
+    for model_name in all_model_names:
+        port_returns = pd.Series(per_model_returns[model_name], index=test_date_idx)
+        metrics_series = evaluate_portfolio(
+            port_returns,
+            risk_free_rate_annual=rf_annual,
+            periods_per_year=periods_per_year,
+            model_name=model_name,
+        )
+        metrics[model_name] = metrics_series.to_dict()
+        portfolio_returns_all[model_name] = port_returns
+
+    context.portfolio_returns = portfolio_returns_all
+    context.metrics = metrics
 
 
 def stage_export_artifacts(context: PipelineContext) -> None:
     """Persist all pipeline outputs to the artifacts/ directory.
 
-    Saves the following artifacts (Stage 2 full set):
-    - Processed historical returns (returns_selected)
-    - Feature matrix and target matrix
-    - Trained model (joblib)
-    - Predicted expected returns (blended_mu)
-    - Optimized portfolio weights
-    - Evaluation metrics
-    - Run manifest (JSON)
-
-    All paths are derived from config/pipeline.yaml:artifacts and the run_id.
+    Writes one set of artifacts per model (weights, predictions, metrics,
+    equity curve). ML-only artifacts (trained model file, model diagnostics)
+    are written only for models that were trained (not for "markowitz").
+    The manifest records all model names and the full metrics dict.
 
     Args:
         context: Shared pipeline state.
-            Reads: returns_selected, feature_matrix, target_matrix, _trained_model,
-                   blended_mu, weights, selected_assets, metrics, run_id, pipeline_cfg.
+            Reads: returns_selected, feature_matrix, target_matrix, _trained_models,
+                   blended_mu, historical_means, weights, selected_assets, metrics,
+                   model_metrics, portfolio_returns, run_id, pipeline_cfg.
             Writes: artifacts_written, status.
 
     Raises:
@@ -312,6 +427,7 @@ def stage_export_artifacts(context: PipelineContext) -> None:
         save_equity_curve,
         save_features,
         save_model,
+        save_model_metrics,
         save_portfolio_metrics,
         save_portfolio_weights,
         save_predicted_returns,
@@ -325,52 +441,89 @@ def stage_export_artifacts(context: PipelineContext) -> None:
 
     art_cfg = context.pipeline_cfg["artifacts"]
     run_id = context.run_id
-    model_name: str = context.pipeline_cfg["models"].get("default", "ridge")
+    trained_models = getattr(context, "_trained_models", {}) or {}
 
-    # Build artifact paths
+    artifacts: list[str] = []
+
+    # Shared data artifacts (one per run, not per model).
     returns_path = f"{art_cfg['data_dir']}/{run_id}_returns.csv"
     X_path = f"{art_cfg['data_dir']}/{run_id}_features.csv"
     y_path = f"{art_cfg['data_dir']}/{run_id}_targets.csv"
-    model_path = f"{art_cfg['models_dir']}/{run_id}_{model_name}.joblib"
-    preds_path = f"{art_cfg['predictions_dir']}/{run_id}_{model_name}_predictions.csv"
-    weights_path = f"{art_cfg['weights_dir']}/{run_id}_{model_name}_weights.csv"
-    metrics_path = f"{art_cfg['metrics_dir']}/{run_id}_{model_name}_metrics.csv"
-    manifest_path = f"{art_cfg['runs_dir']}/{run_id}_manifest.json"
 
-    # Persist intermediate data artifacts
     if context.returns_selected is not None:
         save_returns(context.returns_selected, returns_path)
+        artifacts.append(returns_path)
 
     if context.feature_matrix is not None and context.target_matrix is not None:
         save_features(context.feature_matrix, context.target_matrix, X_path, y_path)
+        artifacts.extend([X_path, y_path])
 
-    # Persist trained model
-    trained_model = getattr(context, "_trained_model", None)
-    if trained_model is not None:
-        save_model(trained_model, model_path)
+    # Per-model artifacts.
+    for model_name, w in context.weights.items():
+        is_ml_model = model_name in trained_models
 
-    # Persist final pipeline outputs
-    save_predicted_returns(context.blended_mu, model_name, preds_path)
-    save_portfolio_weights(context.weights, context.selected_assets, model_name, weights_path)
-    save_portfolio_metrics(context.metrics, metrics_path)
+        # Trained model file (ML models only).
+        if is_ml_model:
+            model_path = f"{art_cfg['models_dir']}/{run_id}_{model_name}.joblib"
+            save_model(trained_models[model_name], model_path)
+            artifacts.append(model_path)
 
-    equity_path = f"{art_cfg['metrics_dir']}/{run_id}_{model_name}_equity_curve.csv"
-    if context.portfolio_returns is not None:
-        save_equity_curve(context.portfolio_returns, equity_path)
+        # Predictions: blended mu for ML models, historical means for markowitz.
+        if is_ml_model and context.blended_mu and model_name in context.blended_mu:
+            mu_series = context.blended_mu[model_name]
+        elif model_name == "markowitz" and context.historical_means is not None:
+            mu_series = context.historical_means
+        else:
+            mu_series = None
 
-    context.artifacts_written = [
-        returns_path, X_path, y_path, model_path,
-        preds_path, weights_path, metrics_path, equity_path, manifest_path,
-    ]
+        if mu_series is not None:
+            preds_path = f"{art_cfg['predictions_dir']}/{run_id}_{model_name}_predictions.csv"
+            save_predicted_returns(mu_series, model_name, preds_path)
+            artifacts.append(preds_path)
+
+        # Portfolio weights.
+        weights_path = f"{art_cfg['weights_dir']}/{run_id}_{model_name}_weights.csv"
+        save_portfolio_weights(w, context.selected_assets, model_name, weights_path)
+        artifacts.append(weights_path)
+
+        # Portfolio metrics.
+        metrics_path = f"{art_cfg['metrics_dir']}/{run_id}_{model_name}_metrics.csv"
+        save_portfolio_metrics(context.metrics[model_name], metrics_path)
+        artifacts.append(metrics_path)
+
+        # Model diagnostic metrics (ML models only).
+        if is_ml_model and context.model_metrics and model_name in context.model_metrics:
+            model_metrics_path = (
+                f"{art_cfg['metrics_dir']}/{run_id}_{model_name}_model_metrics.csv"
+            )
+            save_model_metrics(context.model_metrics[model_name], model_metrics_path)
+            artifacts.append(model_metrics_path)
+
+        # Equity curve.
+        if context.portfolio_returns and model_name in context.portfolio_returns:
+            equity_path = f"{art_cfg['metrics_dir']}/{run_id}_{model_name}_equity_curve.csv"
+            save_equity_curve(context.portfolio_returns[model_name], equity_path)
+            artifacts.append(equity_path)
+
+    # Determine the primary model: highest Sharpe across all models.
+    primary_model = max(
+        context.weights.keys(),
+        key=lambda m: (context.metrics[m].get("Sharpe") or float("-inf")),
+    )
+
+    manifest_path = f"{art_cfg['runs_dir']}/{run_id}_manifest.json"
+    artifacts.append(manifest_path)
+
+    context.artifacts_written = artifacts
     context.status = "completed"
 
-    # Persist run manifest (includes metrics for registry)
     manifest = context.to_run_manifest()
+    manifest["models"] = list(context.weights.keys())
+    manifest["primary_model"] = primary_model
     manifest["metrics"] = context.metrics
     Path(manifest_path).parent.mkdir(parents=True, exist_ok=True)
     with open(manifest_path, "w") as f:
         json.dump(manifest, f, indent=2, default=str)
 
-    # Stage 4: persist run record to SQLite for queryable historical storage.
     from src.persistence.database import upsert_run
     upsert_run(manifest)

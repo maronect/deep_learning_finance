@@ -120,12 +120,13 @@ def main() -> None:
             print(f"  {path}")
     if ctx.metrics:
         import json
-        numeric_metrics = {
-            k: round(float(v), 4)
-            for k, v in ctx.metrics.items()
-            if isinstance(v, (int, float))
-        }
-        print(f"Metrics: {json.dumps(numeric_metrics, indent=2)}")
+        for model_name, model_metrics in ctx.metrics.items():
+            numeric = {
+                k: round(float(v), 4)
+                for k, v in model_metrics.items()
+                if isinstance(v, (int, float))
+            }
+            print(f"Metrics [{model_name}]: {json.dumps(numeric, indent=2)}")
 
 
 if __name__ == "__main__":

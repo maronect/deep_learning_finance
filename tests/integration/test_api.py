@@ -257,6 +257,33 @@ class TestHistorySync:
 
 
 # ---------------------------------------------------------------------------
+# GET /portfolio/compare
+# ---------------------------------------------------------------------------
+
+class TestPortfolioCompare:
+    def test_unknown_run_returns_404(self, client: TestClient) -> None:
+        r = client.get("/portfolio/compare?run_id=NONEXISTENT_RUN_XYZ")
+        assert r.status_code == 404
+
+    def test_missing_run_id_uses_latest(self, client: TestClient) -> None:
+        r = client.get("/portfolio/compare")
+        # Either 200 (runs exist) or 404 (no runs) — both are valid.
+        assert r.status_code in (200, 404)
+
+    def test_response_schema_when_run_exists(self, client: TestClient) -> None:
+        # Only validate schema if a completed run is available.
+        r = client.get("/portfolio/compare")
+        if r.status_code == 200:
+            body = r.json()
+            assert "run_id" in body
+            assert "models" in body
+            assert "primary_model" in body
+            assert "comparison" in body
+            assert isinstance(body["models"], list)
+            assert isinstance(body["comparison"], dict)
+
+
+# ---------------------------------------------------------------------------
 # GET /history/runs/compare — unknown IDs → 404
 # ---------------------------------------------------------------------------
 

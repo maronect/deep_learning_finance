@@ -173,17 +173,38 @@ def load_model(load_path: str) -> object:
     return joblib.load(load_path)
 
 
+def save_model_metrics(
+    metrics_dict: dict,
+    save_path: str,
+) -> None:
+    """Persist model prediction quality metrics (IC, ICIR, hit rate, etc.) to CSV.
+
+    Args:
+        metrics_dict: Dict with keys ic, icir, hit_rate, spearman_ic, mae, mse, r2.
+        save_path: Destination file path.
+    """
+    df = pd.DataFrame([metrics_dict])
+    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(save_path, index=False)
+    print(f"Model metrics saved: {save_path}")
+
+
 def save_equity_curve(
     portfolio_returns: pd.Series,
     save_path: str,
 ) -> None:
     """Persist portfolio equity curve (cumulative returns over the test period) to CSV.
 
+    A 1.0 baseline point is prepended one period before the first return so all
+    models share a common visual starting point when displayed together.
+
     Args:
         portfolio_returns: Period returns indexed by date (out-of-sample test period).
         save_path: Destination file path.
     """
     equity = (1 + portfolio_returns).cumprod()
+    start_date = portfolio_returns.index[0] - pd.DateOffset(months=1)
+    equity = pd.concat([pd.Series([1.0], index=[start_date]), equity])
     df = pd.DataFrame({"date": equity.index.astype(str), "cumulative_return": equity.values})
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(save_path, index=False)
