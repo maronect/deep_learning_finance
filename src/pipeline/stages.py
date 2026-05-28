@@ -136,6 +136,7 @@ def stage_train_models(context: PipelineContext) -> None:
 
     trained_models: dict = {}
     model_metrics: dict[str, dict] = {}
+    wf_raw_preds: dict[str, np.ndarray] = {}
 
     for model_name in enabled:
         model = model_map[model_name]()
@@ -156,8 +157,10 @@ def stage_train_models(context: PipelineContext) -> None:
         y_pred_arr = np.array(y_pred_list)
         y_true_arr = np.array(y_true_list)
         model_metrics[model_name] = compute_model_metrics(y_pred_arr, y_true_arr)
+        wf_raw_preds[model_name] = y_pred_arr  # shape (n_splits, n_assets)
 
     context._trained_models = trained_models  # type: ignore[attr-defined]
+    context._wf_raw_predictions = wf_raw_preds  # type: ignore[attr-defined]
     context.model_metrics = model_metrics
 
 
@@ -282,21 +285,30 @@ def stage_optimize_portfolio(context: PipelineContext) -> None:
 
 
 def stage_evaluate(context: PipelineContext) -> None:
-    """Compute portfolio performance metrics for every model on the out-of-sample period.
+    """Compute portfolio performance metrics using walk-forward per-split optimization.
 
-    The out-of-sample period consists of all test indices across all walk-forward
-    splits. Portfolio returns for each model are computed as returns_selected.dot(weights).
+    For each walk-forward split, portfolio weights are computed using only the
+    training data available at that point in time — eliminating the look-ahead
+    bias that arises from applying a single final weight vector across all test
+    periods. Per-split ML predictions stored by stage_train_models are blended
+    with per-split historical means to form the mu vector for each model.
+
+    The markowitz baseline uses the per-split historical mean as mu (no ML).
 
     Args:
         context: Shared pipeline state.
-            Reads: weights, returns_selected, walk_forward_splits,
-                   feature_matrix, pipeline_cfg.
+            Reads: weights, returns_selected, walk_forward_splits, feature_matrix,
+                   pipeline_cfg, _wf_raw_predictions (set by stage_train_models).
             Writes: portfolio_returns, metrics.
 
     Raises:
-        ValueError: If required prior stages have not been run.
+        ValueError: If required prior stages have not been run, or if walk-forward
+            predictions are missing for an ML model.
     """
+    from src.features.returns import ajustar_risk_free
+    from src.models.blending import blend_predictions
     from src.optimization.evaluation import evaluate_portfolio
+    from src.optimization.sharpe import maximize_sharpe
 
     if context.weights is None:
         raise ValueError("stage_optimize_portfolio must run before stage_evaluate.")
@@ -306,6 +318,10 @@ def stage_evaluate(context: PipelineContext) -> None:
     opt_cfg = context.pipeline_cfg["optimization"]
     rf_annual: float = opt_cfg["risk_free_rate"]
     freq: str = opt_cfg["frequency"]
+    rf_period: float = ajustar_risk_free(rf_annual, freq=freq)
+    weight_bounds: list = opt_cfg.get("weight_bounds", [0.0, 1.0])
+    max_weight: float = float(weight_bounds[1])
+    blend_alpha: float = context.pipeline_cfg["models"].get("blend_alpha", 0.3)
 
     _periods_map: dict[str, int] = {
         "daily": 252,
@@ -314,20 +330,68 @@ def stage_evaluate(context: PipelineContext) -> None:
         "annually": 1,
     }
     periods_per_year: int = _periods_map.get(freq, 12)
+    n: int = len(context.selected_assets)
 
     feature_start_loc: int = context.returns_selected.index.get_loc(  # type: ignore[assignment]
         context.feature_matrix.index[0]
     )
-    test_abs_locs = [
-        feature_start_loc + s["test_idx"] for s in context.walk_forward_splits
-    ]
-    returns_test = context.returns_selected.iloc[test_abs_locs]
 
+    wf_raw_preds: dict[str, np.ndarray] = getattr(context, "_wf_raw_predictions", {})
+    all_model_names: list[str] = list(context.weights.keys())
+
+    # Validate that per-split predictions exist for every ML model.
+    for model_name in all_model_names:
+        if model_name != "markowitz" and model_name not in wf_raw_preds:
+            raise ValueError(
+                f"Walk-forward predictions not found for model '{model_name}'. "
+                "stage_train_models must run before stage_evaluate."
+            )
+
+    per_model_returns: dict[str, list[float]] = {m: [] for m in all_model_names}
+    test_dates: list = []
+
+    for split_i, split in enumerate(context.walk_forward_splits):
+        train_end: int = split["train_end"]
+        test_idx: int = split["test_idx"]
+
+        # Use only training data available at this split — no future information.
+        hist_end: int = feature_start_loc + train_end
+        returns_train_split = context.returns_selected.iloc[:hist_end]
+        cov_split = returns_train_split.cov()
+        hist_means_split = returns_train_split.mean()
+
+        test_dates.append(context.returns_selected.index[feature_start_loc + test_idx])
+
+        for model_name in all_model_names:
+            if model_name == "markowitz":
+                mu_split = hist_means_split
+            else:
+                raw_pred = pd.Series(
+                    wf_raw_preds[model_name][split_i],
+                    index=context.selected_assets,
+                )
+                mu_split = blend_predictions(raw_pred, hist_means_split, alpha=blend_alpha)
+
+            w_split = maximize_sharpe(
+                mu_split.values,
+                cov_split.values,
+                risk_free_rate=rf_period,
+                max_weight=max_weight,
+            )
+            if w_split is None:
+                w_split = np.full(n, 1.0 / n)
+
+            test_return = float(
+                context.returns_selected.iloc[feature_start_loc + test_idx].dot(w_split)
+            )
+            per_model_returns[model_name].append(test_return)
+
+    test_date_idx = pd.DatetimeIndex(test_dates)
     metrics: dict[str, dict] = {}
     portfolio_returns_all: dict[str, pd.Series] = {}
 
-    for model_name, w in context.weights.items():
-        port_returns = returns_test.dot(w)
+    for model_name in all_model_names:
+        port_returns = pd.Series(per_model_returns[model_name], index=test_date_idx)
         metrics_series = evaluate_portfolio(
             port_returns,
             risk_free_rate_annual=rf_annual,
