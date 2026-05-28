@@ -21,8 +21,8 @@ def _pick_model(manifest: dict, requested: Optional[str]) -> str:
     """Select a model name from a run manifest.
 
     If requested is provided and exists in the run, it is returned. Otherwise,
-    the model with the highest Sharpe is returned. Falls back to the legacy
-    models.default field for manifests produced before multi-model support.
+    the model with the highest Sharpe is returned. For legacy single-model
+    manifests, only the trained model is available.
 
     Args:
         manifest: Run manifest dict.
@@ -30,25 +30,38 @@ def _pick_model(manifest: dict, requested: Optional[str]) -> str:
 
     Returns:
         The resolved model name string.
+
+    Raises:
+        LookupError: If requested model is not available in this run.
     """
     available: list[str] = manifest.get("models", [])
     if not available:
-        # Legacy single-model manifest.
-        return (
+        legacy = (
             manifest.get("pipeline_cfg", {}).get("models", {}).get("default", "ridge")
             or "ridge"
         )
+        if requested is not None and requested != legacy:
+            raise LookupError(
+                f"Model '{requested}' is not available in this run. "
+                f"Only '{legacy}' was trained. "
+                "Re-run the pipeline to generate multi-model artifacts."
+            )
+        return legacy
 
-    if requested is not None and requested in available:
+    if requested is not None:
+        if requested not in available:
+            raise LookupError(
+                f"Model '{requested}' not found in this run. "
+                f"Available: {available}."
+            )
         return requested
 
     # Pick the model with the highest Sharpe across all models in this run.
     metrics: dict = manifest.get("metrics", {}) or {}
-    best = max(
+    return max(
         available,
         key=lambda m: (metrics.get(m) or {}).get("Sharpe") or float("-inf"),
     )
-    return best
 
 
 def latest_completed_run(model: Optional[str] = None) -> Optional[tuple[str, str]]:

@@ -19,7 +19,12 @@
       "Bash(bash -n /home/maron/projetcs/deep_learning_finance/test_dashboard.sh)",
       "Bash(flyctl deploy *)",
       "Bash(pip3 show *)",
-      "Bash(pip3 list *)"
+      "Bash(pip3 list *)",
+      "Bash(xargs ls -la)",
+      "Bash(pip show *)",
+      "Bash(conda env *)",
+      "Bash(conda info *)",
+      "Read(//home/maron/**)"
     ]
   }
 }

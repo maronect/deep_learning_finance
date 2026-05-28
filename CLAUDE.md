@@ -6,6 +6,10 @@
 - You may respond to me in Portuguese
 - Do not use any emoji
 
+## Outputs
+- Explain the reasoning behind the technical choices made in the code, directly and concisely.
+- Present alternatives considered and justify why the chosen approach was preferred.
+- When changes span multiple files, start with a high-level overview before describing each file's modifications individually.
 ---
 
 ## Project Overview
