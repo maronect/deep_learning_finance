@@ -8,15 +8,15 @@ def negative_sharpe_ratio(weights, mean_returns, cov_matrix, risk_free_rate):
     vol = portfolio_volatility(weights, cov_matrix)
     return -(ret - risk_free_rate) / vol  # Negativo porque o objetivo eh maximizar
 
-def maximize_sharpe(mean_returns, cov_matrix, risk_free_rate=0.0):
+def maximize_sharpe(mean_returns, cov_matrix, risk_free_rate=0.0, max_weight=1.0):
     num_assets = len(mean_returns)
-    bounds = tuple((0, 1) for _ in range(num_assets))
+    bounds = tuple((0, max_weight) for _ in range(num_assets))
     initial_guess = num_assets * [1. / num_assets]
-    
-    constraints = [{'type': 'eq', 'fun': lambda x: np.sum(x) - 1}]  # pesos somam 1
-    
+
+    constraints = [{'type': 'eq', 'fun': lambda x: np.sum(x) - 1}]
+
     result = minimize(negative_sharpe_ratio, initial_guess,
                       args=(mean_returns, cov_matrix, risk_free_rate),
                       method='SLSQP', bounds=bounds, constraints=constraints)
-    
+
     return result.x if result.success else None

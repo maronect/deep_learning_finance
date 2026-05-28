@@ -241,6 +241,8 @@ def stage_optimize_portfolio(context: PipelineContext) -> None:
     rf_annual: float = opt_cfg["risk_free_rate"]
     freq: str = opt_cfg["frequency"]
     rf_period: float = ajustar_risk_free(rf_annual, freq=freq)
+    weight_bounds: list = opt_cfg.get("weight_bounds", [0.0, 1.0])
+    max_weight: float = float(weight_bounds[1])
 
     last_split = context.walk_forward_splits[-1]
     train_end_feat_idx: int = last_split["train_end"]
@@ -261,7 +263,7 @@ def stage_optimize_portfolio(context: PipelineContext) -> None:
     weights_series: dict[str, pd.Series] = {}
 
     for model_name, mu in mu_per_model.items():
-        w = maximize_sharpe(mu.values, cov.values, risk_free_rate=rf_period)
+        w = maximize_sharpe(mu.values, cov.values, risk_free_rate=rf_period, max_weight=max_weight)
         if w is None:
             warnings.warn(
                 f"Sharpe optimization failed for '{model_name}'. Using equal weights.",

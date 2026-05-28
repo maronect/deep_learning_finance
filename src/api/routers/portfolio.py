@@ -228,6 +228,8 @@ def get_equity_curve(
         portfolio_returns = test_returns[common].dot(weights_s[common].values)
 
         equity = (1 + portfolio_returns).cumprod()
+        start_date = portfolio_returns.index[0] - pd.DateOffset(months=1)
+        equity = pd.concat([pd.Series([1.0], index=[start_date]), equity])
         df = pd.DataFrame({"date": equity.index.astype(str), "cumulative_return": equity.values})
 
     points = [

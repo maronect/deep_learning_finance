@@ -195,11 +195,16 @@ def save_equity_curve(
 ) -> None:
     """Persist portfolio equity curve (cumulative returns over the test period) to CSV.
 
+    A 1.0 baseline point is prepended one period before the first return so all
+    models share a common visual starting point when displayed together.
+
     Args:
         portfolio_returns: Period returns indexed by date (out-of-sample test period).
         save_path: Destination file path.
     """
     equity = (1 + portfolio_returns).cumprod()
+    start_date = portfolio_returns.index[0] - pd.DateOffset(months=1)
+    equity = pd.concat([pd.Series([1.0], index=[start_date]), equity])
     df = pd.DataFrame({"date": equity.index.astype(str), "cumulative_return": equity.values})
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(save_path, index=False)

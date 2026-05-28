@@ -30,6 +30,7 @@ from src.pipeline.stages import (
     stage_predict_returns,
     stage_train_models,
 )
+import src.persistence.database as _db_module
 from src.utils.config_loader import get_config
 
 
@@ -76,14 +77,16 @@ def _make_context(tmp_path, enabled_models: list[str]) -> PipelineContext:
 
 
 @pytest.fixture
-def synthetic_context(tmp_path) -> PipelineContext:
+def synthetic_context(tmp_path, monkeypatch) -> PipelineContext:
     """Single-model context (ridge only) for fast stage-level tests."""
+    monkeypatch.setattr(_db_module, "_db_path", lambda: tmp_path / "test_runs.db")
     return _make_context(tmp_path, enabled_models=["ridge"])
 
 
 @pytest.fixture
-def synthetic_context_multi(tmp_path) -> PipelineContext:
+def synthetic_context_multi(tmp_path, monkeypatch) -> PipelineContext:
     """Multi-model context (ridge + mlp) for multi-model artifact tests."""
+    monkeypatch.setattr(_db_module, "_db_path", lambda: tmp_path / "test_runs.db")
     return _make_context(tmp_path, enabled_models=["ridge", "mlp"])
 
 

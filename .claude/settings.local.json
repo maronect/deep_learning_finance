@@ -24,7 +24,8 @@
       "Bash(pip show *)",
       "Bash(conda env *)",
       "Bash(conda info *)",
-      "Read(//home/maron/**)"
+      "Read(//home/maron/**)",
+      "Bash(pytest tests/integration/test_pipeline.py -x -q)"
     ]
   }
 }

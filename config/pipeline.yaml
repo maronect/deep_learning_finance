@@ -25,7 +25,7 @@ optimization:
   risk_free_rate: 0.15  # Annual risk-free rate (SELIC 2025)
   frequency: "monthly"  # Frequency for risk-free rate adjustment
   solver: "SLSQP"
-  weight_bounds: [0.0, 1.0]  # No short selling
+  weight_bounds: [0.0, 0.40]  # No short selling; max 40% per asset
 
 evaluation:
   metrics:
