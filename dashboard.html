@@ -263,7 +263,7 @@
       Deep Learning Finance API &mdash;
       <span id="footer-ts">Last loaded: --</span>
       &nbsp;&mdash;&nbsp;
-      <span id="refresh-countdown">Refreshing in 60s</span>
+      <span id="refresh-countdown">Refreshing in 300s</span>
       <div class="border-t border-border mt-4 pt-4 text-muted max-w-2xl mx-auto leading-relaxed">
         This dashboard is an academic and practical ML Engineering project.
         Portfolio allocations and return predictions are outputs of experimental
@@ -283,7 +283,7 @@
     const BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
       ? `http://${window.location.host}`
       : 'https://dlfinance-api.fly.dev';
-    const REFRESH_INTERVAL = 60;
+    const POLL_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
     Chart.defaults.color = '#6b7280';
     Chart.defaults.font.family = 'ui-monospace, SFMono-Regular, monospace';
@@ -294,9 +294,9 @@
     let frontierChartInst = null;
     let equityChartInst   = null;
 
-    // Countdown
-    let countdownTimer = null;
-    let countdownValue = REFRESH_INTERVAL;
+    // Run poller
+    let pollTimer      = null;
+    let lastKnownRunId = null;
 
     // State
     let compareData       = null;  // response from /portfolio/compare
@@ -980,26 +980,30 @@
     }
 
     // ====================================================================
-    // Auto-refresh
+    // Run poller — checks for a new run every 30 min; refreshes only if changed
     // ====================================================================
-    function updateCountdown() {
+    function setCountdownLabel(ms) {
       const el = document.getElementById('refresh-countdown');
-      if (el) el.textContent = `Refreshing in ${countdownValue}s`;
+      if (!el) return;
+      const min = Math.round(ms / 60000);
+      el.textContent = `Next check in ${min}m`;
     }
 
-    function startCountdown() {
-      if (countdownTimer) clearInterval(countdownTimer);
-      countdownValue = REFRESH_INTERVAL;
-      updateCountdown();
-      countdownTimer = setInterval(() => {
-        countdownValue--;
-        updateCountdown();
-        if (countdownValue <= 0) {
-          clearInterval(countdownTimer);
-          countdownTimer = null;
-          refreshAll();
-        }
-      }, 1000);
+    function startRunPoller() {
+      if (pollTimer) clearInterval(pollTimer);
+      setCountdownLabel(POLL_INTERVAL_MS);
+      pollTimer = setInterval(async () => {
+        try {
+          const data = await apiFetch('/history/runs?limit=1');
+          const latestId = data.runs && data.runs.length > 0 ? data.runs[0].run_id : null;
+          if (latestId && latestId !== lastKnownRunId) {
+            lastKnownRunId = latestId;
+            refreshAll();
+            return;
+          }
+        } catch (_) { /* silent — poller should never crash the page */ }
+        setCountdownLabel(POLL_INTERVAL_MS);
+      }, POLL_INTERVAL_MS);
     }
 
     async function refreshAll() {
@@ -1041,7 +1045,13 @@
         loadScheduler(),
       ]);
 
-      startCountdown();
+      // Capture the run_id now shown so the poller detects the next new run
+      try {
+        const snap = await apiFetch('/history/runs?limit=1');
+        if (snap.runs && snap.runs.length > 0) lastKnownRunId = snap.runs[0].run_id;
+      } catch (_) {}
+
+      startRunPoller();
     }
 
     // ====================================================================
@@ -1056,7 +1066,13 @@
       loadEquityCurve(),
       loadHistory(),
       loadScheduler(),
-    ]).then(() => startCountdown());
+    ]).then(async () => {
+      try {
+        const snap = await apiFetch('/history/runs?limit=1');
+        if (snap.runs && snap.runs.length > 0) lastKnownRunId = snap.runs[0].run_id;
+      } catch (_) {}
+      startRunPoller();
+    });
   </script>
 </body>
 </html>

@@ -66,6 +66,7 @@ def build_scheduler() -> Optional[BackgroundScheduler]:
             day=day,
             month=month,
             day_of_week=day_of_week,
+            timezone="America/Sao_Paulo",
         )
     else:
         hours = float(sched_cfg.get("interval_hours", 24))
