@@ -32,6 +32,9 @@ Technical architecture reference: see **ARCHITECTURE.md**.
 - `src/features/returns.py` — `compute_returns`, `ajustar_risk_free`, `converter_periodo`
 - `src/features/asset_selection.py` — all 4 strategies + `select_assets()` + `select_assets_from_config()`
 - `src/features/lag_features.py` — `build_lag_features`, `make_walk_forward_splits`
+- `src/optimization/markowitz.py` — `portfolio_return`, `portfolio_volatility`, `markowitz_objective`, `minimize_volatility`, `solve_markowitz` (lambda sweep + optional `max_weight`)
+- `src/optimization/sharpe.py` — `maximize_sharpe` (SLSQP, wraps markowitz primitives)
+- `src/optimization/evaluation.py` — `calculate_sharpe_ratio`, `calculate_annualized_return`, `calculate_max_drawdown`, `calculate_cumulative_return`; all metrics assume log returns
 - `src/models/base.py` — `BaseReturnModel` (ABC)
 - `src/models/ridge.py` — `RidgeReturnModel`
 - `src/models/mlp.py` — `MLPReturnModel`
@@ -196,6 +199,12 @@ Image size reduction: `torch` alone is ~2 GB; the API image installs only what t
 - All pipeline outputs go to `artifacts/` subdirectories.
 - Persist via `src/utils/export.py` — no ad-hoc CSV writes.
 - `artifacts/runs/` stores execution metadata (timestamp, config snapshot, status).
+
+### Returns
+- **All returns are logarithmic** throughout the pipeline: `r_t = ln(P_t / P_{t-1})`.
+- This applies to `compute_returns`, `evaluate_portfolio`, `save_equity_curve`, and the equity curve endpoint. Do not use `pct_change()` or `(1+r).cumprod()` in new code.
+- Equity curves: `np.exp(returns.cumsum())`. Annualized return from log mean: `np.exp(mean * periods) - 1`. Cumulative return: `np.exp(returns.sum())`.
+- Risk-free rate conversion: `np.log(1 + rf_annual) / periods_per_year` (log scaling, not geometric compounding).
 
 ### Optimization
 - Solver: SLSQP via `scipy.optimize.minimize` — keep constraints explicit (bounds + equality).

@@ -202,7 +202,7 @@ def save_equity_curve(
         portfolio_returns: Period returns indexed by date (out-of-sample test period).
         save_path: Destination file path.
     """
-    equity = (1 + portfolio_returns).cumprod()
+    equity = np.exp(portfolio_returns.cumsum())
     start_date = portfolio_returns.index[0] - pd.DateOffset(months=1)
     equity = pd.concat([pd.Series([1.0], index=[start_date]), equity])
     df = pd.DataFrame({"date": equity.index.astype(str), "cumulative_return": equity.values})

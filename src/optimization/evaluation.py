@@ -1,6 +1,6 @@
 """
-Módulo de avaliação de portfólios.
-Calcula métricas financeiras como Sharpe Ratio, retorno anualizado, volatilidade, etc.
+Portfolio evaluation module.
+Computes financial metrics assuming logarithmic returns throughout.
 """
 import numpy as np
 import pandas as pd
@@ -30,8 +30,8 @@ def calculate_sharpe_ratio(
     if len(portfolio_returns) == 0:
         return 0.0
     
-    # Taxa livre de risco no período
-    risk_free_rate_period = (1 + risk_free_rate_annual) ** (1 / periods_per_year) - 1
+    # Log risk-free rate for the period, consistent with log returns.
+    risk_free_rate_period = np.log(1 + risk_free_rate_annual) / periods_per_year
     
     # Retorno médio e desvio padrão no período
     mean_return = portfolio_returns.mean()
@@ -72,8 +72,10 @@ def calculate_annualized_return(
         return 0.0
     
     mean_return = portfolio_returns.mean()
-    annualized_return = (1 + mean_return) ** periods_per_year - 1
-    
+    # Log returns are additive: annualized log return = mean * periods_per_year.
+    # Convert back to simple return for reporting.
+    annualized_return = np.exp(mean_return * periods_per_year) - 1
+
     return annualized_return
 
 
@@ -122,7 +124,8 @@ def calculate_cumulative_return(portfolio_returns: pd.Series) -> float:
     if len(portfolio_returns) == 0:
         return 1.0
     
-    cumulative = (1 + portfolio_returns).prod()
+    # For log returns, cumulative simple return = exp(sum(r_t)) - 1.
+    cumulative = np.exp(portfolio_returns.sum())
     return cumulative
 
 
