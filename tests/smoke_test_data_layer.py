@@ -9,6 +9,7 @@ Functions that require Yahoo Finance (load_prices, run_data_ingestion)
 are marked and skipped here; they belong in integration tests.
 """
 
+import math
 import sys
 from pathlib import Path
 
@@ -131,8 +132,11 @@ def test_compute_returns_daily_values() -> None:
 
     prices = pd.DataFrame({"A": [100.0, 110.0, 121.0]})
     result = compute_returns(prices, freq="daily")
-    assert abs(result["A"].iloc[0] - 0.1) < 1e-9, "First daily return should be 0.1"
-    assert abs(result["A"].iloc[1] - 0.1) < 1e-9, "Second daily return should be 0.1"
+    # Returns are logarithmic: r_t = ln(P_t / P_{t-1}). Both steps are a 10%
+    # price increase, so each log return is ln(1.1), not 0.1.
+    expected = math.log(1.1)
+    assert abs(result["A"].iloc[0] - expected) < 1e-9, "First daily return should be ln(1.1)"
+    assert abs(result["A"].iloc[1] - expected) < 1e-9, "Second daily return should be ln(1.1)"
     _pass("compute_returns — daily values")
 
 
@@ -152,8 +156,9 @@ def test_ajustar_risk_free_daily() -> None:
 
     rf_daily = ajustar_risk_free(0.15, freq="daily")
     assert 0 < rf_daily < 0.01, f"Daily rf out of expected range: {rf_daily}"
-    # Verify round-trip: (1 + rf_daily)^252 ≈ 1.15
-    assert abs((1 + rf_daily) ** 252 - 1.15) < 1e-6
+    # rf is a log rate (ln(1 + rf_annual) / periods), so the round-trip uses
+    # exp(rf_daily * 252) ≈ 1 + rf_annual, not geometric compounding.
+    assert abs(np.exp(rf_daily * 252) - 1.15) < 1e-9
     _pass("ajustar_risk_free — daily")
 
 
@@ -162,7 +167,8 @@ def test_ajustar_risk_free_monthly() -> None:
 
     rf_monthly = ajustar_risk_free(0.15, freq="monthly")
     assert 0 < rf_monthly < 0.02
-    assert abs((1 + rf_monthly) ** 12 - 1.15) < 1e-9
+    # Log-rate round-trip: exp(rf_monthly * 12) ≈ 1 + rf_annual.
+    assert abs(np.exp(rf_monthly * 12) - 1.15) < 1e-9
     _pass("ajustar_risk_free — monthly")
 
 

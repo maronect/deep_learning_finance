@@ -4,4 +4,11 @@ __pycache__/
 data/raw/
 outputs/logs/
 .env
+.aws/
 text/
+
+# Generated pipeline artifacts: stored in S3 and regenerated locally, not versioned.
+# The empty directory skeleton is kept via .gitkeep files.
+artifacts/**
+!artifacts/**/
+!artifacts/**/.gitkeep
