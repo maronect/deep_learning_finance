@@ -1,7 +1,8 @@
 #!/bin/sh
-# Ensure artifact subdirectories exist inside the mounted Fly volume.
-# The Dockerfile creates these dirs during build, but the volume mount at
-# /app/artifacts shadows them — so we recreate them at container start.
+# Ensure artifact subdirectories exist on the container's ephemeral disk.
+# In production there is no persistent volume: S3 is the source of truth and
+# these dirs only hold transient writes (e.g. the rebuilt SQLite DB and any
+# files downloaded from S3 to /tmp). They are recreated on every start.
 set -e
 
 mkdir -p \

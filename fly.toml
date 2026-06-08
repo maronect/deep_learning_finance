@@ -12,9 +12,11 @@ primary_region = 'gru'
 [env]
   PYTHONPATH = '/app'
 
-[[mounts]]
-  source = 'dl_artifacts'
-  destination = '/app/artifacts'
+# No persistent volume: the API reads/writes artifacts from AWS S3 (configured via
+# the AWS_* Fly secrets). Artifacts are NOT shipped in the image (.dockerignore
+# excludes artifacts/) and are NOT stored on the machine — S3 is the single
+# source of truth in production. Run-history is rebuilt from S3 manifests on
+# startup (init_db + sync_from_manifests).
 
 [http_service]
   internal_port = 8000

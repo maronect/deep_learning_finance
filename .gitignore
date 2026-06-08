@@ -1,8 +1,7 @@
-```gitignore
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
 data/raw/
 outputs/logs/
 .env
-text
+text/

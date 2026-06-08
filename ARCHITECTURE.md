@@ -56,6 +56,57 @@ src/api/                          FastAPI (uvicorn)
 
 ---
 
+## Storage Layer
+
+Artifacts have two possible homes: the local filesystem (default) and an
+optional AWS S3 bucket. The active backend is decided at runtime by
+`src/utils/storage.py`, based solely on environment variables — never on YAML
+config, so credentials stay out of version control and config snapshots.
+
+### When S3 is used vs the local filesystem
+
+- **S3 is the primary layer** when both `AWS_ACCESS_KEY_ID` and `AWS_S3_BUCKET`
+  are set (`is_s3_enabled()` returns True). On write, every artifact is saved
+  locally **and** mirrored to S3. On read, the API serves the local copy if it
+  exists, otherwise it downloads the object from S3 to `/tmp`.
+- **The local filesystem is the fallback** when either variable is missing. The
+  pipeline then behaves exactly as before S3 was added. This keeps tests and
+  local development working without any AWS credentials, and is why the fallback
+  exists: the system must run end-to-end with zero cloud configuration.
+
+### Environment variables that activate S3
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `AWS_ACCESS_KEY_ID` | Yes | — | Access key; one of the two activation flags |
+| `AWS_S3_BUCKET` | Yes | — | Bucket name; one of the two activation flags |
+| `AWS_SECRET_ACCESS_KEY` | Yes (in practice) | — | Secret key for the credentials |
+| `AWS_DEFAULT_REGION` | No | `sa-east-1` | Bucket region (São Paulo by default) |
+
+### Bucket layout
+
+Objects mirror the local `artifacts/` tree one-to-one. The S3 key is the local
+path with the leading `artifacts/` prefix removed (`s3_key_from_path()`):
+
+```
+artifacts/weights/20260501_ridge_weights.csv  ->  weights/20260501_ridge_weights.csv
+artifacts/runs/20260501_manifest.json         ->  runs/20260501_manifest.json
+artifacts/data/20260501_returns.csv           ->  data/20260501_returns.csv
+```
+
+So a bucket holds the same `data/`, `models/`, `predictions/`, `metrics/`,
+`weights/`, and `runs/` folders found on disk.
+
+### Why this matters for deployment
+
+On Fly.io the container can be recreated with an empty local volume. Because
+manifests live in S3, `registry.list_runs()` / `load_run_manifest()` and
+`database.sync_from_manifests()` fall back to S3 when the local `runs/`
+directory is empty, letting the API rebuild its run history and serve artifacts
+without any local state.
+
+---
+
 ## Module Map
 
 | Module | Status | Responsibility |
@@ -85,7 +136,8 @@ src/api/                          FastAPI (uvicorn)
 | `src/scheduler/jobs.py` | Implemented | `run_scheduled_pipeline()` — timestamped run_id, per-run log file |
 | `src/scheduler/scheduler.py` | Implemented | `build_scheduler()`, `get_scheduler()` — APScheduler singleton |
 | `src/utils/config_loader.py` | Implemented | `get_config(name)` — loads `config/<name>.yaml` |
-| `src/utils/export.py` | Implemented | `save_returns()`, `save_features()`, `save_model()`, `load_model()` |
+| `src/utils/export.py` | Implemented | `save_returns()`, `save_features()`, `save_model()`, `load_model()`; mirrors writes to S3 when enabled |
+| `src/utils/storage.py` | Implemented | Optional AWS S3 backend: `is_s3_enabled()`, `get_s3_client()`, `s3_upload/download/read_bytes/list()`, `s3_key_from_path()` |
 | `src/data/` | Legacy | Kept for notebook compatibility — do not import in new code |
 | `src/models/lr.py` | Legacy | Original Ridge + MLP — used by notebooks only |
 | `src/models/rnn.py` | Legacy | LSTM/RNN (PyTorch) — not integrated into the pipeline |
@@ -267,4 +319,6 @@ artifacts:
 | `requirements-api.txt` separate from `requirements.txt` | Docker image excludes torch (~2 GB) and matplotlib — reduces image size significantly |
 | `entrypoint.sh` recreates artifact dirs | Fly.io volume mount shadows Dockerfile-created dirs; script runs before uvicorn |
 | SQLite for run history | Zero-dependency persistence; sufficient for the query patterns (list, single, compare) |
+| S3 activated by env vars, not YAML | Credentials never enter version control or config snapshots; the same image runs locally (no creds) and in the cloud (creds injected) |
+| S3 mirrors local writes, reads fall back to S3 | Keeps a fast local copy while surviving container recreation with an empty volume; local-only mode stays fully functional |
 | `src/data/` kept as legacy package | Notebooks still import from it; deleting breaks `00-compare_models.ipynb` |

@@ -6,10 +6,27 @@ metrics) are saved here. No ad-hoc CSV writes anywhere else in src/.
 """
 from __future__ import annotations
 
+import json
 import joblib
 import numpy as np
 import pandas as pd
 from pathlib import Path
+
+from src.utils.storage import is_s3_enabled, s3_key_from_path, s3_upload
+
+
+def _maybe_upload(path: str) -> None:
+    """Upload a freshly written artifact to S3 when S3 storage is enabled.
+
+    No-op when S3 is not configured, so local-only runs and tests are
+    unaffected. The local copy is always kept; S3 receives a mirror.
+
+    Args:
+        path: Local path of the file that was just written.
+    """
+    if is_s3_enabled():
+        p = Path(path)
+        s3_upload(p, s3_key_from_path(p))
 
 
 def save_portfolio_metrics(
@@ -29,6 +46,7 @@ def save_portfolio_metrics(
     df = pd.DataFrame([metrics_dict])
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(save_path, index=False)
+    _maybe_upload(save_path)
     print(f"Métricas salvas em: {save_path}")
 
 
@@ -59,6 +77,7 @@ def save_portfolio_weights(
     })
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(save_path, index=False)
+    _maybe_upload(save_path)
     print(f"Pesos salvos em: {save_path}")
 
 
@@ -86,6 +105,7 @@ def save_predicted_returns(
     })
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(save_path, index=False)
+    _maybe_upload(save_path)
     print(f"Previsões salvas em: {save_path}")
 
 
@@ -106,6 +126,7 @@ def save_all_metrics_comparison(
     df = pd.DataFrame(metrics_list)
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(save_path, index=False)
+    _maybe_upload(save_path)
     print(f"Comparação de métricas salva em: {save_path}")
 
 
@@ -121,6 +142,7 @@ def save_returns(
     """
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     returns.to_csv(save_path)
+    _maybe_upload(save_path)
     print(f"Returns saved: {save_path}")
 
 
@@ -142,6 +164,8 @@ def save_features(
     Path(y_path).parent.mkdir(parents=True, exist_ok=True)
     X.to_csv(X_path)
     y.to_csv(y_path)
+    _maybe_upload(X_path)
+    _maybe_upload(y_path)
     print(f"Features saved: {X_path}")
     print(f"Targets saved:  {y_path}")
 
@@ -158,6 +182,7 @@ def save_model(
     """
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, save_path)
+    _maybe_upload(save_path)
     print(f"Model saved: {save_path}")
 
 
@@ -186,6 +211,7 @@ def save_model_metrics(
     df = pd.DataFrame([metrics_dict])
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(save_path, index=False)
+    _maybe_upload(save_path)
     print(f"Model metrics saved: {save_path}")
 
 
@@ -208,5 +234,28 @@ def save_equity_curve(
     df = pd.DataFrame({"date": equity.index.astype(str), "cumulative_return": equity.values})
     Path(save_path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(save_path, index=False)
+    _maybe_upload(save_path)
     print(f"Equity curve saved: {save_path}")
+
+
+def save_manifest(
+    manifest: dict,
+    save_path: str,
+) -> None:
+    """Persist a run manifest to JSON and mirror it to S3 when enabled.
+
+    The manifest is the entry point the run registry and the database sync use
+    to discover past runs, so it must reach S3 alongside the other artifacts;
+    otherwise the S3 fallback cannot list runs after a container is recreated
+    with an empty local volume.
+
+    Args:
+        manifest: The run manifest dict.
+        save_path: Destination file path (should end in .json).
+    """
+    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(save_path, "w") as f:
+        json.dump(manifest, f, indent=2, default=str)
+    _maybe_upload(save_path)
+    print(f"Manifest saved: {save_path}")
 
