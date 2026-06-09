@@ -31,7 +31,7 @@ class TestComputeReturns:
         prices = pd.DataFrame({"A": [100.0, 110.0, 121.0]},
                                index=pd.date_range("2020-01-01", periods=3))
         result = compute_returns(prices, freq="daily")
-        assert abs(result["A"].iloc[0] - 0.1) < 1e-10
+        assert abs(result["A"].iloc[0] - np.log(1.1)) < 1e-10
 
     def test_daily_no_nan_output(self) -> None:
         prices = self._daily_prices()
@@ -90,16 +90,17 @@ class TestComputeReturns:
 
 class TestAjustarRiskFree:
     def test_daily_round_trip(self) -> None:
+        # exp(rf_log * 252) must recover the original gross return 1.15
         rf = ajustar_risk_free(0.15, freq="daily")
-        assert abs((1 + rf) ** 252 - 1.15) < 1e-6
+        assert abs(np.exp(rf * 252) - 1.15) < 1e-10
 
     def test_weekly_round_trip(self) -> None:
         rf = ajustar_risk_free(0.15, freq="weekly")
-        assert abs((1 + rf) ** 52 - 1.15) < 1e-6
+        assert abs(np.exp(rf * 52) - 1.15) < 1e-10
 
     def test_monthly_round_trip(self) -> None:
         rf = ajustar_risk_free(0.15, freq="monthly")
-        assert abs((1 + rf) ** 12 - 1.15) < 1e-9
+        assert abs(np.exp(rf * 12) - 1.15) < 1e-10
 
     def test_daily_smaller_than_monthly(self) -> None:
         rf_daily = ajustar_risk_free(0.15, freq="daily")
@@ -125,10 +126,10 @@ class TestConverterPeriodo:
         _, ann_vol = converter_periodo(0.001, period_vol, dias=252)
         assert abs(ann_vol - period_vol * np.sqrt(252)) < 1e-12
 
-    def test_return_compounding(self) -> None:
+    def test_return_scaling(self) -> None:
         period_ret = 0.01
         ann_ret, _ = converter_periodo(period_ret, 0.02, dias=12)
-        expected = (1 + period_ret) ** 12 - 1
+        expected = period_ret * 12
         assert abs(ann_ret - expected) < 1e-12
 
     def test_annual_values_exceed_period_values(self) -> None:

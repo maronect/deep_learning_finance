@@ -10,11 +10,36 @@ from typing import Optional
 
 from src.pipeline.registry import list_runs, load_run_manifest
 from src.utils.config_loader import get_config
+from src.utils.storage import is_s3_enabled, s3_download, s3_key_from_path
 
 
 def _artifact_cfg() -> dict:
     """Return the artifacts section of pipeline.yaml."""
     return get_config("pipeline")["artifacts"]
+
+
+def _resolve_local_or_s3(local: Path) -> Path:
+    """Return a usable local path for an artifact, downloading from S3 if needed.
+
+    If the file exists locally, it is returned as-is. Otherwise, when S3 storage
+    is enabled, the object is downloaded to /tmp and that temporary path is
+    returned. If neither source has the file, the original local path is returned
+    so callers raise their usual 404.
+
+    Args:
+        local: The expected local artifact path.
+
+    Returns:
+        A path that exists when the artifact is available locally or in S3,
+        otherwise the original (non-existent) local path.
+    """
+    if local.exists():
+        return local
+    if is_s3_enabled():
+        tmp = Path("/tmp") / local.name
+        if s3_download(s3_key_from_path(local), tmp):
+            return tmp
+    return local
 
 
 def _pick_model(manifest: dict, requested: Optional[str]) -> str:
@@ -89,39 +114,49 @@ def latest_completed_run(model: Optional[str] = None) -> Optional[tuple[str, str
 
 
 def predictions_path(run_id: str, model: str) -> Path:
-    """Resolve the predictions CSV path for a given run and model."""
+    """Resolve the predictions CSV path, downloading from S3 if not local."""
     cfg = _artifact_cfg()
-    return Path(cfg["predictions_dir"]) / f"{run_id}_{model}_predictions.csv"
+    return _resolve_local_or_s3(
+        Path(cfg["predictions_dir"]) / f"{run_id}_{model}_predictions.csv"
+    )
 
 
 def weights_path(run_id: str, model: str) -> Path:
-    """Resolve the portfolio weights CSV path for a given run and model."""
+    """Resolve the portfolio weights CSV path, downloading from S3 if not local."""
     cfg = _artifact_cfg()
-    return Path(cfg["weights_dir"]) / f"{run_id}_{model}_weights.csv"
+    return _resolve_local_or_s3(
+        Path(cfg["weights_dir"]) / f"{run_id}_{model}_weights.csv"
+    )
 
 
 def metrics_path(run_id: str, model: str) -> Path:
-    """Resolve the portfolio metrics CSV path for a given run and model."""
+    """Resolve the portfolio metrics CSV path, downloading from S3 if not local."""
     cfg = _artifact_cfg()
-    return Path(cfg["metrics_dir"]) / f"{run_id}_{model}_metrics.csv"
+    return _resolve_local_or_s3(
+        Path(cfg["metrics_dir"]) / f"{run_id}_{model}_metrics.csv"
+    )
 
 
 def model_metrics_path(run_id: str, model: str) -> Path:
-    """Resolve the model diagnostics metrics CSV path for a given run and model."""
+    """Resolve the model diagnostics CSV path, downloading from S3 if not local."""
     cfg = _artifact_cfg()
-    return Path(cfg["metrics_dir"]) / f"{run_id}_{model}_model_metrics.csv"
+    return _resolve_local_or_s3(
+        Path(cfg["metrics_dir"]) / f"{run_id}_{model}_model_metrics.csv"
+    )
 
 
 def returns_path(run_id: str) -> Path:
-    """Resolve the processed returns CSV path for a given run."""
+    """Resolve the processed returns CSV path, downloading from S3 if not local."""
     cfg = _artifact_cfg()
-    return Path(cfg["data_dir"]) / f"{run_id}_returns.csv"
+    return _resolve_local_or_s3(Path(cfg["data_dir"]) / f"{run_id}_returns.csv")
 
 
 def equity_curve_path(run_id: str, model: str) -> Path:
-    """Resolve the equity curve CSV path for a given run and model."""
+    """Resolve the equity curve CSV path, downloading from S3 if not local."""
     cfg = _artifact_cfg()
-    return Path(cfg["metrics_dir"]) / f"{run_id}_{model}_equity_curve.csv"
+    return _resolve_local_or_s3(
+        Path(cfg["metrics_dir"]) / f"{run_id}_{model}_equity_curve.csv"
+    )
 
 
 def resolve_run(

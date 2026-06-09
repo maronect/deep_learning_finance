@@ -11,9 +11,7 @@ fields in PipelineContext are dicts keyed by model name.
 """
 from __future__ import annotations
 
-import json
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -426,6 +424,7 @@ def stage_export_artifacts(context: PipelineContext) -> None:
     from src.utils.export import (
         save_equity_curve,
         save_features,
+        save_manifest,
         save_model,
         save_model_metrics,
         save_portfolio_metrics,
@@ -521,9 +520,7 @@ def stage_export_artifacts(context: PipelineContext) -> None:
     manifest["models"] = list(context.weights.keys())
     manifest["primary_model"] = primary_model
     manifest["metrics"] = context.metrics
-    Path(manifest_path).parent.mkdir(parents=True, exist_ok=True)
-    with open(manifest_path, "w") as f:
-        json.dump(manifest, f, indent=2, default=str)
+    save_manifest(manifest, manifest_path)
 
     from src.persistence.database import upsert_run
     upsert_run(manifest)

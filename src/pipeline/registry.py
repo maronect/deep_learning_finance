@@ -15,6 +15,7 @@ from typing import Any, Optional
 import pandas as pd
 
 from src.utils.config_loader import get_config
+from src.utils.storage import is_s3_enabled
 
 
 def _primary_metrics(metrics: dict, primary_model: str) -> dict:
@@ -39,11 +40,55 @@ def _runs_dir() -> Path:
     return Path(cfg["artifacts"]["runs_dir"])
 
 
+def _summary_row(m: dict) -> dict:
+    """Build a single list_runs() summary row from a manifest dict."""
+    metrics = m.get("metrics", {}) or {}
+    primary = m.get("primary_model") or m.get("pipeline_cfg", {}).get("models", {}).get("default", "")
+    primary_metrics = _primary_metrics(metrics, primary)
+    return {
+        "run_id": m.get("run_id", ""),
+        "started_at": m.get("started_at", ""),
+        "status": m.get("status", ""),
+        "model": primary,
+        "selected_assets_count": len(m.get("selected_assets") or []),
+        "sharpe": primary_metrics.get("Sharpe"),
+        "annualized_return": primary_metrics.get("Annualized_Return"),
+        "artifacts_written_count": len(m.get("artifacts_written") or []),
+    }
+
+
+def _load_manifests_from_s3() -> list[dict]:
+    """Load all run manifests stored in S3 under the runs/ prefix.
+
+    Used as a fallback when the local artifacts/runs/ directory is empty (e.g.
+    after a container is recreated and the local volume starts empty).
+
+    Returns:
+        List of manifest dicts. Empty if S3 holds no manifests.
+    """
+    from src.utils.storage import s3_key_from_path, s3_list, s3_read_bytes
+
+    prefix = s3_key_from_path(_runs_dir()) + "/"
+    manifests: list[dict] = []
+    for key in sorted(s3_list(prefix)):
+        if not key.endswith("_manifest.json"):
+            continue
+        data = s3_read_bytes(key)
+        if data is None:
+            continue
+        try:
+            manifests.append(json.loads(data))
+        except json.JSONDecodeError:
+            continue
+    return manifests
+
+
 def list_runs() -> pd.DataFrame:
     """List all recorded pipeline runs with their key metadata.
 
     Scans artifacts/runs/ for manifest JSON files and returns a summary
-    DataFrame sorted by run_id (chronological order).
+    DataFrame sorted by run_id (chronological order). When the local directory
+    is empty and S3 storage is enabled, manifests are read from S3 instead.
 
     Returns:
         DataFrame with columns: run_id, started_at, status, model,
@@ -53,32 +98,21 @@ def list_runs() -> pd.DataFrame:
     runs_path = _runs_dir()
     manifests = sorted(runs_path.glob("*_manifest.json"))
 
-    if not manifests:
-        return pd.DataFrame()
-
     rows = []
-    for manifest_file in manifests:
-        try:
-            with open(manifest_file) as f:
-                m = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            continue
+    if manifests:
+        for manifest_file in manifests:
+            try:
+                with open(manifest_file) as f:
+                    m = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                continue
+            rows.append(_summary_row(m))
+    elif is_s3_enabled():
+        for m in _load_manifests_from_s3():
+            rows.append(_summary_row(m))
 
-        metrics = m.get("metrics", {}) or {}
-        primary = m.get("primary_model") or m.get("pipeline_cfg", {}).get("models", {}).get("default", "")
-        primary_metrics = _primary_metrics(metrics, primary)
-        rows.append(
-            {
-                "run_id": m.get("run_id", ""),
-                "started_at": m.get("started_at", ""),
-                "status": m.get("status", ""),
-                "model": primary,
-                "selected_assets_count": len(m.get("selected_assets") or []),
-                "sharpe": primary_metrics.get("Sharpe"),
-                "annualized_return": primary_metrics.get("Annualized_Return"),
-                "artifacts_written_count": len(m.get("artifacts_written") or []),
-            }
-        )
+    if not rows:
+        return pd.DataFrame()
 
     return pd.DataFrame(rows)
 
@@ -96,12 +130,20 @@ def load_run_manifest(run_id: str) -> dict[str, Any]:
         FileNotFoundError: If no manifest exists for the given run_id.
     """
     manifest_path = _runs_dir() / f"{run_id}_manifest.json"
-    if not manifest_path.exists():
-        raise FileNotFoundError(
-            f"No manifest found for run_id='{run_id}' at {manifest_path}."
-        )
-    with open(manifest_path) as f:
-        return json.load(f)
+    if manifest_path.exists():
+        with open(manifest_path) as f:
+            return json.load(f)
+
+    if is_s3_enabled():
+        from src.utils.storage import s3_key_from_path, s3_read_bytes
+
+        data = s3_read_bytes(s3_key_from_path(manifest_path))
+        if data is not None:
+            return json.loads(data)
+
+    raise FileNotFoundError(
+        f"No manifest found for run_id='{run_id}' at {manifest_path}."
+    )
 
 
 def compare_runs(run_ids: Optional[list[str]] = None) -> pd.DataFrame:

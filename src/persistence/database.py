@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any, Generator, Optional
 
 from src.utils.config_loader import get_config
+from src.utils.storage import is_s3_enabled
 
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS runs (
@@ -276,11 +277,48 @@ def compare_runs(run_ids: list[str]) -> list[dict[str, Any]]:
     return [by_id[rid] for rid in run_ids if rid in by_id]
 
 
+def _sync_from_s3() -> int:
+    """Download manifests from S3 and upsert any not already present in the DB.
+
+    Only manifests whose run_id is not yet stored are fetched and inserted, so
+    repeated calls stay cheap. Lets the API rebuild its DB from S3 after a
+    container is recreated with an empty local volume.
+
+    Returns:
+        Number of new manifests synced from S3.
+    """
+    from src.utils.storage import s3_key_from_path, s3_list, s3_read_bytes
+
+    cfg = get_config("pipeline")
+    runs_dir = Path(cfg["artifacts"]["runs_dir"])
+    prefix = s3_key_from_path(runs_dir) + "/"
+
+    synced = 0
+    for key in sorted(s3_list(prefix)):
+        if not key.endswith("_manifest.json"):
+            continue
+        run_id = Path(key).name[: -len("_manifest.json")]
+        if get_run(run_id) is not None:
+            continue
+        data = s3_read_bytes(key)
+        if data is None:
+            continue
+        try:
+            manifest = json.loads(data)
+            upsert_run(manifest)
+            synced += 1
+        except Exception:
+            continue
+
+    return synced
+
+
 def sync_from_manifests() -> int:
     """Scan artifacts/runs/ and upsert all manifest files into the database.
 
     Useful for rebuilding the DB after a fresh deployment or if the DB was
-    deleted but manifest files remain.
+    deleted but manifest files remain. When S3 storage is enabled, any manifests
+    present only in S3 (not in the local directory or the DB) are also synced.
 
     Returns:
         Number of manifests successfully synced.
@@ -288,20 +326,20 @@ def sync_from_manifests() -> int:
     cfg = get_config("pipeline")
     runs_dir = Path(cfg["artifacts"]["runs_dir"])
 
-    if not runs_dir.exists():
-        return 0
-
-    manifests = sorted(runs_dir.glob("*_manifest.json"))
     synced = 0
 
-    for manifest_file in manifests:
-        try:
-            with open(manifest_file) as f:
-                import json as _json
-                manifest = _json.load(f)
-            upsert_run(manifest)
-            synced += 1
-        except Exception:
-            continue
+    if runs_dir.exists():
+        manifests = sorted(runs_dir.glob("*_manifest.json"))
+        for manifest_file in manifests:
+            try:
+                with open(manifest_file) as f:
+                    manifest = json.load(f)
+                upsert_run(manifest)
+                synced += 1
+            except Exception:
+                continue
+
+    if is_s3_enabled():
+        synced += _sync_from_s3()
 
     return synced

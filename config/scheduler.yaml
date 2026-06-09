@@ -2,7 +2,7 @@ scheduler:
   enabled: true
   trigger: "cron"           # "interval" or "cron"
   interval_hours: 24        # used when trigger=interval
-  cron: "0 9 * * *"        # used when trigger=cron (9 AM UTC daily, mon-fri recommended)
+  cron: "0 9 * * *"        # used when trigger=cron (9 AM BRT, America/Sao_Paulo)
   max_instances: 1          # prevent overlapping pipeline runs
   misfire_grace_seconds: 3600  # allow up to 1h late execution on restart
 

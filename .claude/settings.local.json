@@ -25,7 +25,13 @@
       "Bash(conda env *)",
       "Bash(conda info *)",
       "Read(//home/maron/**)",
-      "Bash(pytest tests/integration/test_pipeline.py -x -q)"
+      "Bash(pytest tests/integration/test_pipeline.py -x -q)",
+      "Bash(pip3.10 show *)",
+      "Bash(conda run *)",
+      "Bash(jupyter kernelspec *)",
+      "Bash(/home/maron/poc_HSBS/.venv/bin/python --version)",
+      "Bash(/home/maron/quant/.venv/bin/pip show *)",
+      "Bash(/home/maron/poc_HSBS/.venv/bin/pip install *)"
     ]
   }
 }

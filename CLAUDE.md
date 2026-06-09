@@ -32,6 +32,9 @@ Technical architecture reference: see **ARCHITECTURE.md**.
 - `src/features/returns.py` — `compute_returns`, `ajustar_risk_free`, `converter_periodo`
 - `src/features/asset_selection.py` — all 4 strategies + `select_assets()` + `select_assets_from_config()`
 - `src/features/lag_features.py` — `build_lag_features`, `make_walk_forward_splits`
+- `src/optimization/markowitz.py` — `portfolio_return`, `portfolio_volatility`, `markowitz_objective`, `minimize_volatility`, `solve_markowitz` (lambda sweep + optional `max_weight`)
+- `src/optimization/sharpe.py` — `maximize_sharpe` (SLSQP, wraps markowitz primitives)
+- `src/optimization/evaluation.py` — `calculate_sharpe_ratio`, `calculate_annualized_return`, `calculate_max_drawdown`, `calculate_cumulative_return`; all metrics assume log returns
 - `src/models/base.py` — `BaseReturnModel` (ABC)
 - `src/models/ridge.py` — `RidgeReturnModel`
 - `src/models/mlp.py` — `MLPReturnModel`
@@ -166,6 +169,35 @@ Image size reduction: `torch` alone is ~2 GB; the API image installs only what t
 - `LEARNING_TRAIL.md`, `UNDERSTANDING.md` — project documentation files (untracked); do not delete
 - `tests/unit/test_model_metrics.py` — unit tests for `compute_model_metrics`
 
+### Post-Stage 10 — AWS S3 storage layer (uncommitted, current branch: dev, as of 2026-06-07)
+Optional S3 backend for artifacts. S3 is the primary storage layer when
+`AWS_ACCESS_KEY_ID` + `AWS_S3_BUCKET` are set; otherwise the local filesystem is
+used (fallback keeps tests and credential-free local dev working). Full
+technical detail in ARCHITECTURE.md "Storage Layer".
+- `src/utils/storage.py` — new module: `is_s3_enabled()`, `get_s3_client()` (singleton, boto3 imported lazily), `s3_upload()`, `s3_download()`, `s3_read_bytes()`, `s3_list()`, `s3_key_from_path()`. Reads **only** env vars (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_DEFAULT_REGION` default `sa-east-1`), never YAML.
+- `src/utils/export.py` — `_maybe_upload()` mirrors every write to S3 when enabled; new `save_manifest()` (writes manifest JSON + uploads).
+- `src/pipeline/stages.py` — `stage_export_artifacts` writes the manifest via `save_manifest()` (see bug fix below); removed now-unused `json`/`Path` imports.
+- `src/pipeline/registry.py` — `list_runs()` and `load_run_manifest()` fall back to S3 when local `runs/` is empty/missing (helpers `_summary_row`, `_load_manifests_from_s3`).
+- `src/api/deps.py` — `_resolve_local_or_s3()` wraps all 6 artifact path resolvers: serve local if present, else download from S3 to `/tmp`.
+- `src/persistence/database.py` — `sync_from_manifests()` also pulls S3-only manifests via `_sync_from_s3()`.
+- `requirements.txt` + `requirements-api.txt` — added `boto3>=1.34`.
+- `ARCHITECTURE.md` — new "Storage Layer" section + Module Map + Key Design Decisions entries.
+- Tests: `tests/unit/test_storage.py` (12, boto3 mocked, no real AWS calls), `tests/unit/test_export.py` (3, S3-mirror regression guard).
+
+**Bug fixed during this work:** the run manifest was written with a direct `json.dump()` in `stage_export_artifacts`, bypassing `export.py` and so never uploaded to S3. This broke the whole S3 fallback (registry/DB discover runs by listing `runs/` manifests in S3). Fixed by routing the manifest through `save_manifest()`. Verified end-to-end against a real bucket: manifest lands in S3 and `registry._load_manifests_from_s3()` reads it back.
+
+**Status / pending:**
+- NOT committed. Entire feature lives in the `dev` working tree alongside the uncommitted multi-model pipeline work above.
+- Fly.io (production) still uses the local volume only, for two reasons: the deploy job runs on push to `main` (S3 code is on `dev`), and no AWS secrets are set on Fly. To activate S3 in production: (1) merge to `main` so the image ships boto3 + the S3 code; (2) `flyctl secrets set AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_S3_BUCKET=... AWS_DEFAULT_REGION=sa-east-1`. The local `.env` is gitignored and is never deployed.
+- Known doc discrepancy: the "Best result: Ridge Sharpe 0.591" line in Project Overview predates the look-ahead-bias fix + weight constraints. Current runs show negative Sharpe for all three strategies (rf 15% SELIC dominates the ~1-3% p.a. returns). Not yet reconciled.
+- `.aws/credentials` in the repo holds a `flyctl secrets set` command, not real credentials — safe to delete (it is not read by the code; only env vars are).
+
+Run locally with S3 enabled:
+```bash
+set -a; source .env; set +a   # .env holds the four AWS_* vars (gitignored)
+python -m src.pipeline.runner
+```
+
 ---
 
 ## Key Conventions
@@ -196,6 +228,12 @@ Image size reduction: `torch` alone is ~2 GB; the API image installs only what t
 - All pipeline outputs go to `artifacts/` subdirectories.
 - Persist via `src/utils/export.py` — no ad-hoc CSV writes.
 - `artifacts/runs/` stores execution metadata (timestamp, config snapshot, status).
+
+### Returns
+- **All returns are logarithmic** throughout the pipeline: `r_t = ln(P_t / P_{t-1})`.
+- This applies to `compute_returns`, `evaluate_portfolio`, `save_equity_curve`, and the equity curve endpoint. Do not use `pct_change()` or `(1+r).cumprod()` in new code.
+- Equity curves: `np.exp(returns.cumsum())`. Annualized return from log mean: `np.exp(mean * periods) - 1`. Cumulative return: `np.exp(returns.sum())`.
+- Risk-free rate conversion: `np.log(1 + rf_annual) / periods_per_year` (log scaling, not geometric compounding).
 
 ### Optimization
 - Solver: SLSQP via `scipy.optimize.minimize` — keep constraints explicit (bounds + equality).
