@@ -31,7 +31,32 @@
       "Bash(jupyter kernelspec *)",
       "Bash(/home/maron/poc_HSBS/.venv/bin/python --version)",
       "Bash(/home/maron/quant/.venv/bin/pip show *)",
-      "Bash(/home/maron/poc_HSBS/.venv/bin/pip install *)"
+      "Bash(/home/maron/poc_HSBS/.venv/bin/pip install *)",
+      "Bash(awk '/def select_stable_corr_pairs|def stable_corr_pairs/,/^def [a-z]/' src/features/asset_selection.py)",
+      "Bash(curl -s --max-time 25 https://dlfinance-api.fly.dev/health)",
+      "Bash(curl -s --max-time 25 \"https://dlfinance-api.fly.dev/history/runs?limit=3\")",
+      "Bash(flyctl version *)",
+      "Bash(flyctl auth *)",
+      "Bash(flyctl volumes *)",
+      "Bash(flyctl machines *)",
+      "Bash(flyctl machine *)",
+      "Bash(flyctl ssh *)",
+      "Bash(curl -s https://dlfinance-api.fly.dev/health)",
+      "Bash(curl -s \"https://dlfinance-api.fly.dev/history/runs?limit=200\")",
+      "Bash(awk '{print $NF}')",
+      "Bash(bc)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" https://dlfinance-api.fly.dev/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" https://dlfinance-api.fly.dev/docs)",
+      "Bash(curl -s \"https://dlfinance-api.fly.dev/history/runs?limit=2\")",
+      "Bash(curl -s \"https://dlfinance-api.fly.dev/scheduler/status\")",
+      "Bash(node -e ' *)",
+      "Bash(export OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 MKL_NUM_THREADS=4)",
+      "Bash(unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_S3_BUCKET AWS_DEFAULT_REGION)",
+      "Bash(xargs cat)",
+      "Bash(export OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4)",
+      "Bash(uvicorn src.api.main:app --host 0.0.0.0 --port 8000)",
+      "Bash(curl -s -o /dev/null http://localhost:8000/health)",
+      "Bash(curl -s \"http://localhost:8000/history/runs?limit=1\")"
     ]
   }
 }
