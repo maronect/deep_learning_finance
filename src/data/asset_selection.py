@@ -1,4 +1,5 @@
-"""
+# porcao legado do codigo (não usada na pipeline MLOps)
+""" 
 Diversified Asset Selection Module
 ----------------------------------
 
@@ -21,20 +22,35 @@ from src.data.loader import load_prices, compute_returns
 # 1. Universo grande de ações brasileiras (mantido)
 
 def get_brazilian_stocks_universe() -> List[str]:
-    energy = ["PETR4.SA","PETR3.SA","ELET3.SA","ELET6.SA","EQTL3.SA","CSAN3.SA","UGPA3.SA"]
-    mining_steel = ["VALE3.SA","GGBR4.SA","CSNA3.SA","USIM5.SA","CMIG4.SA","GOAU4.SA"]
-    banks = ["ITUB4.SA","BBDC4.SA","BBAS3.SA","SANB11.SA","BRSR6.SA","BPAN4.SA","ABCB4.SA","PINE4.SA"]
-    retail_consumer = ["ABEV3.SA","VIVT3.SA","RENT3.SA","MGLU3.SA","PCAR3.SA","MRVE3.SA"]
-    industrial_tech = ["WEGE3.SA","EMBR3.SA","RADL3.SA","TOTS3.SA","TIMS3.SA","CYRE3.SA","KLBN11.SA"]
-    financial_services = ["B3SA3.SA","CAML3.SA","SUZB3.SA"]
-    construction = ["CYRE3.SA","EZTC3.SA","JHSF3.SA","MRVE3.SA"]
+    energy = ["PETR4.SA", "PETR3.SA", "EQTL3.SA", "CSAN3.SA", "UGPA3.SA"]
+    mining_steel = ["VALE3.SA", "GGBR4.SA", "CSNA3.SA", "USIM5.SA", "CMIG4.SA", "GOAU4.SA"]
+    banks = ["ITUB4.SA", "BBDC4.SA", "BBAS3.SA", "SANB11.SA", "BRSR6.SA", "ABCB4.SA", "PINE4.SA"]
+    retail_consumer = ["ABEV3.SA", "VIVT3.SA", "RENT3.SA", "MGLU3.SA", "PCAR3.SA", "LREN3.SA", "ASAI3.SA"]
+    industrial_tech = ["WEGE3.SA", "RADL3.SA", "TOTS3.SA", "TIMS3.SA"]
+    financial_services = ["B3SA3.SA", "SUZB3.SA"]
+    construction_realestate = ["CYRE3.SA", "EZTC3.SA", "JHSF3.SA", "MRVE3.SA", "MULT3.SA"]
+    healthcare = ["HAPV3.SA", "RDOR3.SA", "FLRY3.SA"]
+    insurance = ["BBSE3.SA", "PSSA3.SA"]
+    utilities_sanitation = ["SBSP3.SA", "CPLE6.SA"]
+    agribusiness = ["SLCE3.SA"]
+    logistics_infra = ["RAIL3.SA", "CCRO3.SA"]
+    education = ["YDUQ3.SA", "COGN3.SA"]
 
     all_stocks = (
-        energy + mining_steel + banks +
-        retail_consumer + industrial_tech +
-        financial_services + construction
+        energy
+        + mining_steel
+        + banks
+        + retail_consumer
+        + industrial_tech
+        + financial_services
+        + construction_realestate
+        + healthcare
+        + insurance
+        + utilities_sanitation
+        + agribusiness
+        + logistics_infra
+        + education
     )
-
     return list(dict.fromkeys(all_stocks))
 
 

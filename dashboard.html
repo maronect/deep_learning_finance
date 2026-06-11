@@ -332,6 +332,24 @@
       return (Number(n) * 100).toFixed(2) + '%';
     }
 
+    // Format a timestamp as "YYYY-MM-DD HH:MM BRT" in America/Sao_Paulo.
+    // Run timestamps (started_at) are naive but represent UTC, so pass
+    // assumeUtc=true to append 'Z'. The scheduler's next_run_time already
+    // carries a -03:00 offset, so assumeUtc=false leaves it untouched.
+    function fmtBRT(value, assumeUtc) {
+      if (!value) return '--';
+      let s = String(value).replace(' ', 'T');
+      if (assumeUtc && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s += 'Z';
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return '--';
+      const p = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      }).formatToParts(d).reduce((a, part) => (a[part.type] = part.value, a), {});
+      return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute} BRT`;
+    }
+
     function show(id) {
       const el = document.getElementById(id);
       if (el) el.classList.remove('hidden');
@@ -901,7 +919,7 @@
         } else {
           tbody.innerHTML = data.runs.map(r => {
             const sc = STATUS_CLASSES[r.status] || 'text-muted';
-            const ts = r.started_at ? r.started_at.replace('T', ' ').slice(0, 16) : '--';
+            const ts = fmtBRT(r.started_at, true);
             const modelColor = MODEL_COLORS[r.model] || '';
             const modelDot   = modelColor
               ? `<span class="inline-block w-1.5 h-1.5 rounded-full mr-1 shrink-0" style="background:${modelColor}"></span>`
@@ -948,7 +966,7 @@
         document.getElementById('sched-jobs').textContent = data.job_count;
 
         const nextRun = data.jobs && data.jobs.length > 0 && data.jobs[0].next_run_time
-          ? data.jobs[0].next_run_time.replace('T', ' ').slice(0, 16)
+          ? fmtBRT(data.jobs[0].next_run_time, false)
           : 'N/A';
         document.getElementById('sched-next').textContent = nextRun;
 
@@ -956,7 +974,7 @@
         if (histResult.status === 'fulfilled') {
           const runs = histResult.value.runs;
           if (runs && runs.length > 0 && runs[0].started_at) {
-            lastRunText = runs[0].started_at.replace('T', ' ').slice(0, 16);
+            lastRunText = fmtBRT(runs[0].started_at, true);
           }
         }
         document.getElementById('sched-last-run').textContent = lastRunText;
